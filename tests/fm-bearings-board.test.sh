@@ -492,6 +492,81 @@ test_build_refuses_a_template_without_exactly_one_slot() {
   pass "build refuses a template without exactly one data slot"
 }
 
+test_home_template_selection() {
+  local home data mode selected out
+  for mode in absolute relative environment; do
+    home=$(make_home "template-$mode")
+    data="$home/payload.json"
+    write_valid_payload "$data"
+    mkdir -p "$home/config" "$home/custom templates"
+    selected="$home/custom templates/board.html"
+    cp "$ROOT/.agents/skills/bearings/assets/board-template.html" "$selected"
+    printf '\n<!-- home-template-marker -->\n' >> "$selected"
+    case "$mode" in
+      absolute) printf '%s\n' "$selected" > "$home/config/bearings-board-template" ;;
+      relative) printf '%s' 'custom templates/board.html' > "$home/config/bearings-board-template" ;;
+      environment)
+        # Even an invalid config must be ignored when the test override wins.
+        printf '%s\n' "$home/missing.html" > "$home/config/bearings-board-template"
+        ;;
+    esac
+    if [ "$mode" = environment ]; then
+      out=$(FM_BEARINGS_BOARD_TEMPLATE="$selected" run_board "$home" build "$data") \
+        || fail "environment override did not win: $out"
+    else
+      out=$(unset FM_BEARINGS_BOARD_TEMPLATE; run_board "$home" build "$data") \
+        || fail "$mode home template build failed: $out"
+    fi
+    assert_contains "$(cat "$home/.lavish/bearings-board.html")" 'home-template-marker' \
+      "$mode build did not use the selected template"
+    extract_payload "$home/.lavish/bearings-board.html" | jq -e '.schema == "fm-bearings-board.v1"' >/dev/null \
+      || fail "$mode home template lost the payload"
+  done
+  pass "home templates support absolute and home-relative paths; environment override wins"
+}
+
+test_home_template_refusals() {
+  local home data kind selected out config
+  for kind in missing slotless duplicate symlink directory unreadable empty multiline; do
+    home=$(make_home "template-refusal-$kind")
+    data="$home/payload.json"
+    config="$home/config/bearings-board-template"
+    selected="$home/custom.html"
+    write_valid_payload "$data"
+    mkdir -p "$home/config" "$home/.lavish"
+    printf 'existing board\n' > "$home/.lavish/bearings-board.html"
+    printf '%s\n' "$selected" > "$config"
+    case "$kind" in
+      missing) ;;
+      slotless) printf '<html>no slot</html>\n' > "$selected" ;;
+      duplicate) printf '__FM_BEARINGS_BOARD_DATA__\n__FM_BEARINGS_BOARD_DATA__\n' > "$selected" ;;
+      symlink) ln -s "$ROOT/.agents/skills/bearings/assets/board-template.html" "$selected" ;;
+      directory) mkdir "$selected" ;;
+      unreadable)
+        cp "$ROOT/.agents/skills/bearings/assets/board-template.html" "$selected"
+        chmod 000 "$selected"
+        if [ -r "$selected" ]; then
+          printf 'skip: current user can read mode-000 template\n'
+          continue
+        fi
+        ;;
+      empty) : > "$config" ;;
+      multiline) printf '%s\n%s\n' "$selected" "$selected" > "$config" ;;
+    esac
+    if out=$(unset FM_BEARINGS_BOARD_TEMPLATE; run_board "$home" build "$data" 2>&1); then
+      fail "$kind configured template was accepted"
+    fi
+    assert_contains "$out" "$config" "$kind refusal omitted the config file"
+    case "$kind" in
+      empty|multiline) ;;
+      *) assert_contains "$out" "$selected" "$kind refusal omitted the resolved path" ;;
+    esac
+    [ "$(cat "$home/.lavish/bearings-board.html")" = 'existing board' ] \
+      || fail "$kind refusal changed the existing board"
+  done
+  pass "invalid home template configuration refuses without replacing the board"
+}
+
 test_charted_kind_is_optional_and_accepts_both_values() {
   local home data
   home=$(make_home chartedkind)
@@ -769,6 +844,8 @@ test_build_refuses_a_nondecision_reconcile_value() {
   pass "build reserves reconcile across non-decision cards"
 }
 
+test_home_template_selection
+test_home_template_refusals
 test_path_is_stable_and_home_scoped
 test_build_refuses_malformed_payloads_before_touching_the_board
 test_charted_kind_is_optional_and_accepts_both_values
