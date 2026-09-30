@@ -99,7 +99,7 @@
 #      passed/checks-passed/passed-with-override/passed-with-skips -> done,
 #      failed -> failed, cancelled -> unknown (no verdict unless the green
 #      delivery safeguard below applies), ci_monitor_interrupted -> blocked
-#      (its open PR is no longer monitored; the same green safeguard applies).
+#      (its PR is no longer monitored; the same green safeguard applies).
 #      A cancelled outcome takes precedence
 #      over an interrupted step's failed status or outstanding gate findings;
 #      it does not rewrite historical events or backlog records.
@@ -784,15 +784,19 @@ nm_reclassify_failed_run_as_held_green() {  # [interrupted]
 }
 
 # A ci_monitor_interrupted run (no-mistakes' own terminal word, see
-# fm_nm_run_status_class) left its PR open with nothing monitoring CI. Checks
-# green on an open or merged PR is the same held-green delivery as above;
-# anything else is a real blocker, because the run is never resumed and only a
-# fresh validation run watches that PR's CI again.
+# fm_nm_run_status_class) left its PR with nothing monitoring CI. Checks green
+# on an open or merged PR is the same held-green delivery as above; anything
+# else is a real blocker, because the run is never resumed and only a fresh
+# validation run watches that PR's CI again. The detail asserts no PR
+# disposition: the reclassification above declines for a closed, unreadable,
+# or identity-less PR as well as for non-green checks, and the coarse ledger
+# path reads none.
+NM_INTERRUPTED_CI_MONITOR_DETAIL="ci monitor interrupted by daemon restart; PR unmonitored - rerun validation to resume"
 nm_classify_interrupted_ci_monitor() {
   nm_reclassify_failed_run_as_held_green interrupted && return 0
   local pr_url
   RUN_STATE=blocked
-  RUN_DETAIL="ci monitor interrupted by daemon restart; PR remains open but unmonitored - rerun validation to resume"
+  RUN_DETAIL=$NM_INTERRUPTED_CI_MONITOR_DETAIL
   pr_url=$(strip_quotes "$(nm_field pr)")
   [ -z "$pr_url" ] || RUN_DETAIL="$RUN_DETAIL: $pr_url"
 }
@@ -1104,9 +1108,7 @@ if [ "$HAVE_RUN" = 1 ]; then
           RUN_STATE=failed; RUN_DETAIL="run failed"
         fi ;;
       cancelled) RUN_STATE=unknown; RUN_DETAIL="run cancelled: no verdict" ;;
-      ci_monitor_interrupted)
-        RUN_STATE=blocked
-        RUN_DETAIL="ci monitor interrupted by daemon restart; PR remains open but unmonitored - rerun validation to resume" ;;
+      ci_monitor_interrupted) RUN_STATE=blocked; RUN_DETAIL=$NM_INTERRUPTED_CI_MONITOR_DETAIL ;;
       *)         RUN_STATE=unknown; RUN_DETAIL="runs list status: $COARSE_STATUS" ;;
     esac
   else

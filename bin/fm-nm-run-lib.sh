@@ -160,11 +160,9 @@ fm_nm_run_status_class() {  # <status_word>
 # live run must not hide a newer failure. If the newest is live and another
 # same-branch live run exists, neither has exclusive authority: report all
 # candidate ids as unknown.
-# The status column is checked against fm_nm_run_status_class's vocabulary.
-# An unrecognized word on the newest row, or on an older row while the newest
-# is live (it could be a competing live run), reports unknown naming that word;
-# older history cannot outrank a recognized terminal newest row, so its words
-# are not needed there. A newer live row can replace cancelled history,
+# The status column is checked against fm_nm_run_status_class's vocabulary; any
+# unrecognized word on a same-branch row reports unknown naming that word.
+# A newer live row can replace cancelled history,
 # but the caller must fetch its full status BY ID and prove branch/head,
 # executing status, or active pipeline custody before using its steps.
 # Never reuse another run's gate detail.
@@ -229,11 +227,8 @@ fm_nm_select_run() {  # <branch> <axi-overview> <worktree> [timeout_secs]
           st !~ /^[a-z_-]+$/ || head !~ /^[a-fA-F0-9]+$/ || length(head) < 7 || length(head) > 40) {
         invalid_run = 1; next
       }
-      recognized = (st in vocab)
-      if (first == "") {
-        first = id; first_status = st
-        if (!recognized) newest_unknown = st
-      } else if (!recognized && older_unknown == "") older_unknown = st
+      if (first == "") { first = id; first_status = st }
+      if (!(st in vocab) && unknown_status == "") unknown_status = st
       if (st == "running" || st == "pending") live++
       next
     }
@@ -244,10 +239,8 @@ fm_nm_select_run() {  # <branch> <axi-overview> <worktree> [timeout_secs]
         print "unknown|unreadable runs table; run ids: " ids
       else if ((shown+0) < (total+0)) print "incomplete|" ids
       else if (invalid_run) print "unknown|unreadable runs table; run ids: " ids
-      else if (newest_unknown != "")
-        print "unknown|unrecognized run status " newest_unknown "; run ids: " ids
-      else if (older_unknown != "" && (first_status == "running" || first_status == "pending"))
-        print "unknown|unrecognized run status " older_unknown "; run ids: " ids
+      else if (unknown_status != "")
+        print "unknown|unrecognized run status " unknown_status "; run ids: " ids
       else if (first == "") print "absent"
       else if ((first_status == "running" || first_status == "pending") && live > 1)
         print "unknown|competing live runs; run ids: " ids

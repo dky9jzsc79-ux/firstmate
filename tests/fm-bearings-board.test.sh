@@ -266,7 +266,7 @@ test_build_refuses_malformed_payloads_before_touching_the_board() {
 
   write_valid_payload "$data"
   jq '.underway = [{"id":"sample-task","repo":"sample","state":"working",
-    "kind":"ship","doing":"implementing"}]' "$data" > "$data.tmp" && mv "$data.tmp" "$data"
+    "kind":"ship","doing":"implementing","status":"active","reason":null}]' "$data" > "$data.tmp" && mv "$data.tmp" "$data"
   set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
   [ "$rc" -ne 0 ] || fail "an underway row without an explicit name marker was accepted"
 
@@ -527,27 +527,34 @@ test_charted_kind_is_optional_and_accepts_both_values() {
   pass "charted kind is optional and accepts queued and warning"
 }
 
-# Underway status and reason are optional so a payload composed before they
-# existed still builds; when present they carry the snapshot's exact values.
-test_underway_status_is_optional_and_carries_active_or_blocked() {
-  local home data
+# Every Underway row carries the snapshot's status, exactly active or blocked,
+# and its reason (string or null); a row without them, or with any other
+# status word, is refused before the existing board is touched.
+test_underway_status_is_required_and_carries_active_or_blocked() {
+  local home data out rc bad
   home=$(make_home underwaystatus)
   data="$home/payload.json"
   write_valid_payload "$data"
   jq '.underway = [
-        {"id":"a","repo":"sample","state":"working","kind":"ship","name":"Legacy row","doing":"implementing"},
         {"id":"b","repo":"sample","state":"working","kind":"ship","name":"Active row","doing":"implementing",
          "status":"active","reason":null},
         {"id":"c","repo":"sample","state":"working","kind":"ship","name":"Held row","doing":"validating",
          "status":"blocked","reason":"awaiting upstream CI approval"}
       ]' "$data" > "$data.tmp" && mv "$data.tmp" "$data"
   run_board "$home" build "$data" >/dev/null \
-    || fail "a legacy, active, and blocked underway row was refused"
+    || fail "an active and a blocked underway row were refused"
   extract_payload "$home/.lavish/bearings-board.html" | jq -e '
     [.underway[] | [.status, .reason]]
-      == [[null, null], ["active", null], ["blocked", "awaiting upstream CI approval"]]
+      == [["active", null], ["blocked", "awaiting upstream CI approval"]]
   ' >/dev/null || fail "the built board did not carry the underway status it was given"
-  pass "underway status is optional and carries active or blocked with its reason"
+  for bad in 'del(.underway[0].status)' 'del(.underway[0].reason)' \
+             '.underway[0].status = "unknown"' '.underway[0].status = "working"' \
+             '.underway[0].reason = 3'; do
+    jq "$bad" "$data" > "$data.bad"
+    set +e; out=$(run_board "$home" build "$data.bad" 2>&1); rc=$?; set -e
+    [ "$rc" -ne 0 ] || fail "an underway row with $bad was accepted"
+  done
+  pass "underway status is required and carries exactly active or blocked with its reason"
 }
 
 
@@ -811,7 +818,7 @@ test_build_refuses_a_nondecision_reconcile_value() {
 test_path_is_stable_and_home_scoped
 test_build_refuses_malformed_payloads_before_touching_the_board
 test_charted_kind_is_optional_and_accepts_both_values
-test_underway_status_is_optional_and_carries_active_or_blocked
+test_underway_status_is_required_and_carries_active_or_blocked
 test_build_injects_binds_then_arms
 test_registration_cannot_consume_before_any_origin_binding
 test_build_does_not_bind_or_arm_when_session_start_fails

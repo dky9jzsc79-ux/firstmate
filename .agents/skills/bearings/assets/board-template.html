@@ -445,12 +445,9 @@ __FM_BEARINGS_BOARD_DATA__
   }
   function badge(tone, text) { return el("span", "fm-badge fm-badge--" + tone, text); }
   /* Underway status is exactly active or blocked (fm-bearings-snapshot.sh owns
-     the mapping); a payload composed before that field existed keeps its raw
-     state word. */
+     the mapping and fm-bearings-board.sh refuses any other payload). */
   function underwayBadge(t) {
-    if (t.status === "active") return badge("online", "active");
-    if (t.status === "blocked") return badge("warn", "blocked");
-    return badge(t.state === "working" ? "online" : "info", t.state);
+    return t.status === "blocked" ? badge("warn", "blocked") : badge("online", "active");
   }
   function underwaySub(t) {
     var sub = t.doing + " · " + t.kind + " · " + (t.repo || t.id);

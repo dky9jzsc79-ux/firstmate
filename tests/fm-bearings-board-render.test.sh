@@ -208,7 +208,8 @@ test_an_underway_row_leads_with_the_task_name_and_keeps_its_run_status() {
   home=$(make_home underway-name)
   out=$(render_board "$home" '[
     {"id":"fm-board-name-r1","repo":"firstmate","name":"Show task names on the board",
-     "state":"working","kind":"ship","doing":"no-mistakes: review round 2"}
+     "state":"working","kind":"ship","doing":"no-mistakes: review round 2",
+     "status":"active","reason":null}
   ]' '[]')
   printf '%s' "$out" | jq -e '
     (.underway | length) == 1
@@ -216,31 +217,29 @@ test_an_underway_row_leads_with_the_task_name_and_keeps_its_run_status() {
         | .title == "Show task names on the board"
           and (.sub | test("no-mistakes: review round 2"))
           and (.sub | test("ship")) and (.sub | test("firstmate"))
-          and [.badges[] | .text] == ["working"])
+          and [.badges[] | .text] == ["active"])
   ' >/dev/null || fail "an underway row did not lead with the task name: $out"
   pass "an underway row leads with the task name and still reports its run status"
 }
 
-# The badge says exactly active or blocked, and a blocked row leads its second
-# line with why; a payload composed before status existed keeps its state word.
+# The badge says exactly active or blocked, never the raw state word, and a
+# blocked row leads its second line with why.
 test_an_underway_row_badges_active_or_blocked_with_its_reason() {
   local home out
   home=$(make_home underway-status)
   out=$(render_board "$home" '[
     {"id":"a","repo":"firstmate","name":"Active task","state":"working","kind":"ship",
      "doing":"validating (running)","status":"active","reason":null},
-    {"id":"b","repo":"firstmate","name":"Held task","state":"working","kind":"ship",
-     "doing":"validating (running)","status":"blocked","reason":"awaiting upstream CI approval"},
-    {"id":"c","repo":"firstmate","name":"Legacy task","state":"parked","kind":"ship",
-     "doing":"parked at review"}
+    {"id":"b","repo":"firstmate","name":"Held task","state":"parked","kind":"ship",
+     "doing":"validating (running)","status":"blocked","reason":"awaiting upstream CI approval"}
   ]' '[]')
   printf '%s' "$out" | jq -e '
-    (.underway | length) == 3
+    (.underway | length) == 2
       and (.underway[0] | .badges == [{"tone":"online","text":"active"}]
            and (.sub | startswith("validating (running) · ")))
       and (.underway[1] | .badges == [{"tone":"warn","text":"blocked"}]
            and (.sub | startswith("awaiting upstream CI approval: validating (running) · ")))
-      and (.underway[2] | .badges == [{"tone":"info","text":"parked"}])
+      and ([.underway[].badges[].text] | index("parked") == null)
   ' >/dev/null || fail "an underway row did not badge active or blocked with its reason: $out"
   pass "an underway row badges active or blocked and a blocked row says why"
 }
@@ -272,7 +271,8 @@ test_an_underway_identifier_label_is_not_replaced_by_run_status() {
   home=$(make_home underway-identifier)
   out=$(render_board "$home" '[
     {"id":"mate/child-1","repo":null,"name":"mate/child-1",
-     "state":"working","kind":"secondmate","doing":"fixing the failing check"}
+     "state":"working","kind":"secondmate","doing":"fixing the failing check",
+     "status":"active","reason":null}
   ]' '[]')
   printf '%s' "$out" | jq -e '
     (.underway | length) == 1

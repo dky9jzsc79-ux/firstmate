@@ -5447,9 +5447,8 @@ test_interrupted_ci_monitor_after_green_reads_done() {
   pass 'an interrupted CI monitor after green checks reads held-for-merge done'
 }
 
-# Unrecognized words stay conservative exactly where they could matter: on the
-# newest row, or on older history while the newest run is live (a possible
-# competing live run). Each unknown names the word it could not classify.
+# Any unrecognized status word on a same-branch row, newest or history, keeps
+# the selection unknown; each unknown names the word it could not classify.
 test_unrecognized_run_status_names_the_word() {
   local d out
   make_competing_runs_case unrecognized-newest quarantined failed
@@ -5471,9 +5470,9 @@ test_unrecognized_run_status_names_the_word() {
   FM_FAKE_AXI_STATUS="$(run_failed fm/competing | sed 's/01RUN/01NEW/')"
   FM_FAKE_AXI_STATUS_RUN=$FM_FAKE_AXI_STATUS
   out=$(run_crew_state "$d" competing)
-  assert_contains "$out" 'state: failed' 'a terminal newest run decides over unrecognized older history'
-  assert_contains "$out" 'run: 01NEW' 'the newest terminal run is the selected run'
-  pass 'unrecognized run status is named and stays conservative only where it matters'
+  assert_contains "$out" 'state: unknown' 'an unrecognized older row beside a terminal newest run stays unverified'
+  assert_contains "$out" 'unrecognized run status quarantined' 'the older unrecognized word is named'
+  pass 'unrecognized run status is named and stays conservative on every row'
 }
 
 # The legacy coarse ledger carries the same word; it reads blocked there too.
