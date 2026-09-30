@@ -86,11 +86,14 @@
 # containing "</script>" can never terminate the data block early.
 #
 # Template selection for build: FM_BEARINGS_BOARD_TEMPLATE (tests only), then
-# $FM_HOME/config/bearings-board-template, then the shipped
-# .agents/skills/bearings/assets/board-template.html. The optional config is a
-# readable regular file containing exactly one non-empty path line (a final
-# newline is optional); relative paths resolve against FM_HOME, without shell
-# expansion. It is home-local, gitignored, and not inherited by secondmates.
+# bearings-board-template in the config directory
+# (${FM_CONFIG_OVERRIDE:-$FM_HOME/config}, like every other config reader),
+# then the shipped .agents/skills/bearings/assets/board-template.html. The
+# optional config is a readable regular file containing exactly one non-empty
+# path line (a final newline is optional); relative paths resolve against
+# FM_HOME even when FM_CONFIG_OVERRIDE selects the config directory, without
+# shell expansion. It is home-local, gitignored, and not inherited by
+# secondmates.
 # Selected templates must be readable regular files, not symlinks, with exactly
 # one data slot. Invalid configuration or templates refuse before publication;
 # configured-template errors name both the config file and resolved path.
@@ -119,7 +122,7 @@ fail() {
 }
 
 resolve_template() {
-  local config="$FM_HOME/config/bearings-board-template" configured
+  local config="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/bearings-board-template" configured
   TEMPLATE="${FM_BEARINGS_BOARD_TEMPLATE:-}"
   TEMPLATE_SOURCE=
   if [ -n "$TEMPLATE" ]; then

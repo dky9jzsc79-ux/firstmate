@@ -494,35 +494,48 @@ test_build_refuses_a_template_without_exactly_one_slot() {
 
 test_home_template_selection() {
   local home data mode selected out
-  for mode in absolute relative environment; do
+  for mode in absolute relative config-override environment; do
     home=$(make_home "template-$mode")
     data="$home/payload.json"
     write_valid_payload "$data"
-    mkdir -p "$home/config" "$home/custom templates"
+    mkdir -p "$home/config" "$home/custom templates" "$home/alt-config"
     selected="$home/custom templates/board.html"
     cp "$ROOT/.agents/skills/bearings/assets/board-template.html" "$selected"
     printf '\n<!-- home-template-marker -->\n' >> "$selected"
     case "$mode" in
       absolute) printf '%s\n' "$selected" > "$home/config/bearings-board-template" ;;
       relative) printf '%s' 'custom templates/board.html' > "$home/config/bearings-board-template" ;;
+      config-override)
+        # The home config must be ignored when the override directory wins,
+        # and the override's relative path still resolves against FM_HOME.
+        printf '%s\n' "$home/missing.html" > "$home/config/bearings-board-template"
+        printf '%s\n' 'custom templates/board.html' > "$home/alt-config/bearings-board-template"
+        ;;
       environment)
         # Even an invalid config must be ignored when the test override wins.
         printf '%s\n' "$home/missing.html" > "$home/config/bearings-board-template"
         ;;
     esac
-    if [ "$mode" = environment ]; then
-      out=$(FM_BEARINGS_BOARD_TEMPLATE="$selected" run_board "$home" build "$data") \
-        || fail "environment override did not win: $out"
-    else
-      out=$(unset FM_BEARINGS_BOARD_TEMPLATE; run_board "$home" build "$data") \
-        || fail "$mode home template build failed: $out"
-    fi
+    case "$mode" in
+      environment)
+        out=$(FM_BEARINGS_BOARD_TEMPLATE="$selected" run_board "$home" build "$data") \
+          || fail "environment override did not win: $out"
+        ;;
+      config-override)
+        out=$(unset FM_BEARINGS_BOARD_TEMPLATE; FM_CONFIG_OVERRIDE="$home/alt-config" run_board "$home" build "$data") \
+          || fail "config directory override build failed: $out"
+        ;;
+      *)
+        out=$(unset FM_BEARINGS_BOARD_TEMPLATE; run_board "$home" build "$data") \
+          || fail "$mode home template build failed: $out"
+        ;;
+    esac
     assert_contains "$(cat "$home/.lavish/bearings-board.html")" 'home-template-marker' \
       "$mode build did not use the selected template"
     extract_payload "$home/.lavish/bearings-board.html" | jq -e '.schema == "fm-bearings-board.v1"' >/dev/null \
       || fail "$mode home template lost the payload"
   done
-  pass "home templates support absolute and home-relative paths; environment override wins"
+  pass "home templates support absolute and home-relative paths; config directory and environment overrides win"
 }
 
 test_home_template_refusals() {

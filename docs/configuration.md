@@ -912,6 +912,7 @@ Put one non-empty line naming an absolute template path or a path relative to th
 For example, `.lavish/board-template.html` selects that file under this home.
 The template must retain the builder's data slot and payload script block; start from `.agents/skills/bearings/assets/board-template.html`.
 This setting is not inherited by secondmate homes.
+When `FM_CONFIG_OVERRIDE` is present for tests or specialized setup, it selects the config directory directly, while a relative template path still resolves against `FM_HOME`.
 `bin/fm-bearings-board.sh`'s header owns selection precedence, file validation, and fail-closed diagnostics.
 
 ## Worker launch environment (config/launch-env-allowlist)
