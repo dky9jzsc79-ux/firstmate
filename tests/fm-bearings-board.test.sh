@@ -270,6 +270,22 @@ test_build_refuses_malformed_payloads_before_touching_the_board() {
   set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
   [ "$rc" -ne 0 ] || fail "an underway row without an explicit name marker was accepted"
 
+  for bad_status in '"unknown"' '"working"' 'true'; do
+    write_valid_payload "$data"
+    jq --argjson st "$bad_status" '.underway = [{"id":"sample-task","repo":"sample","state":"working",
+      "kind":"ship","name":"Sample","doing":"implementing","status":$st,"reason":null}]' \
+      "$data" > "$data.tmp" && mv "$data.tmp" "$data"
+    set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
+    [ "$rc" -ne 0 ] || fail "an underway status other than active or blocked was accepted: $bad_status"
+  done
+
+  write_valid_payload "$data"
+  jq '.underway = [{"id":"sample-task","repo":"sample","state":"failed","kind":"ship",
+    "name":"Sample","doing":"run failed","status":"blocked","reason":7}]' \
+    "$data" > "$data.tmp" && mv "$data.tmp" "$data"
+  set +e; out=$(run_board "$home" build "$data" 2>&1); rc=$?; set -e
+  [ "$rc" -ne 0 ] || fail "a non-string underway reason was accepted"
+
   for invalid_filed in "last Tuesday" "2026-13-01" "2026-08-14T99:30:00Z" "2026-02-29"; do
     write_valid_payload "$data"
     jq --arg filed "$invalid_filed" '.charted[0].filed = $filed' "$data" > "$data.tmp" \
@@ -509,6 +525,29 @@ test_charted_kind_is_optional_and_accepts_both_values() {
       and .charted_warning_more == 2
   ' >/dev/null || fail "the built board did not carry the charted kinds and omitted-warning count it was given"
   pass "charted kind is optional and accepts queued and warning"
+}
+
+# Underway status and reason are optional so a payload composed before they
+# existed still builds; when present they carry the snapshot's exact values.
+test_underway_status_is_optional_and_carries_active_or_blocked() {
+  local home data
+  home=$(make_home underwaystatus)
+  data="$home/payload.json"
+  write_valid_payload "$data"
+  jq '.underway = [
+        {"id":"a","repo":"sample","state":"working","kind":"ship","name":"Legacy row","doing":"implementing"},
+        {"id":"b","repo":"sample","state":"working","kind":"ship","name":"Active row","doing":"implementing",
+         "status":"active","reason":null},
+        {"id":"c","repo":"sample","state":"working","kind":"ship","name":"Held row","doing":"validating",
+         "status":"blocked","reason":"awaiting upstream CI approval"}
+      ]' "$data" > "$data.tmp" && mv "$data.tmp" "$data"
+  run_board "$home" build "$data" >/dev/null \
+    || fail "a legacy, active, and blocked underway row was refused"
+  extract_payload "$home/.lavish/bearings-board.html" | jq -e '
+    [.underway[] | [.status, .reason]]
+      == [[null, null], ["active", null], ["blocked", "awaiting upstream CI approval"]]
+  ' >/dev/null || fail "the built board did not carry the underway status it was given"
+  pass "underway status is optional and carries active or blocked with its reason"
 }
 
 
@@ -772,6 +811,7 @@ test_build_refuses_a_nondecision_reconcile_value() {
 test_path_is_stable_and_home_scoped
 test_build_refuses_malformed_payloads_before_touching_the_board
 test_charted_kind_is_optional_and_accepts_both_values
+test_underway_status_is_optional_and_carries_active_or_blocked
 test_build_injects_binds_then_arms
 test_registration_cannot_consume_before_any_origin_binding
 test_build_does_not_bind_or_arm_when_session_start_fails

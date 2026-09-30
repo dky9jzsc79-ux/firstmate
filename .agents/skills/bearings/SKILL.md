@@ -43,6 +43,7 @@ For a contribution wake or linked-issue filing, go directly to Contribution foll
    The command's header and `--help` output own its exact fields, bounds, opt-ins, and output contract.
    The default performs bounded concurrent remote-ledger reads for registered remote homes under one shared snapshot budget and may refresh the parent-side cache.
    Only pass `--include-prs` when the captain asks for repository-wide live GitHub PR enrichment.
+   In lavish mode also pass `--fields fulltext`, so board text arrives untruncated and the template, not the snapshot, does the clipping.
    Registered owned contributions use the cached `contributions` projection independently of that opt-in; no invocation-time forge discovery is needed to read it.
    For registered secondmates, use the snapshot's structured-home classification and provenance.
    A parent event or bounded terminal contradiction is fallback evidence, never authority over readable structured home state.
@@ -109,6 +110,7 @@ Compose the payload from the same snapshot with the same ranking judgment as the
 - `charted_more` counts omitted queued rows only, while `charted_warning_more` counts omitted warning rows only; keep both counts separate whenever the board payload truncates Charted Next.
 - Every Underway row copies the task-identifying `in_flight.name` from the snapshot into an explicit `name` field, which the board leads with while keeping the run status on its second line.
   The snapshot command's header owns its durable-title-or-id normalization; never replace the projected label with run status or invent another label.
+- Every Underway row copies the snapshot's `status` (exactly active or blocked) and `reason` unchanged; never compose a status of your own or fall back to the raw `state` word.
 - Every Charted Next row copies the snapshot gate's durable filed date into `filed`, and the board orders the section by it, newest filed first.
   Follow `bin/fm-bearings-board.sh`'s payload contract for the accepted format.
   Omit it or pass null for a row with no durable filed date - the main-inventory or return-catchup warning, an unavailable secondmate home, or a queued row filed before dates were recorded - and the board keeps those rows in payload order after every dated row.
@@ -155,7 +157,7 @@ Every `/bearings` chat response renders EXACTLY these four sections, in THIS ord
    When the section is empty but coverage is incomplete, say that no decision is recorded and give the checked/known count; a missing coverage field is also unverified.
 2. **Recently Landed** - the bounded current recent-completions baseline: merged PRs, completed scouts, and finished local-only merges across the main fleet and every registered secondmate home.
    Empty-state: "No recent completions are in the current baseline."
-3. **Underway** - live work progressing on its own, one line of current state per direct report.
+3. **Underway** - live work, one line of current state per direct report, led by its snapshot `status` (active or blocked) and, when blocked, its `reason`.
    Empty-state: "Nothing is underway."
 4. **Charted Next** - queued or gated work waiting on the fleet or a date, deferred or aged captain-hold safety gates, plus action-free fleet-integrity warnings.
    Empty-state: "Nothing is queued."

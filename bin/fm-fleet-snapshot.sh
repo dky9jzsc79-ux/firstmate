@@ -63,7 +63,10 @@
 #     hints.open_decisions is the keyed open-decision set returned by
 #     fm-classify-lib.sh's authoritative status_open_decisions fold and reconciled
 #     against current_state; hints.pending_decision and hints.blocked_event are
-#     booleans derived from that set.
+#     booleans derived from that set. hints.ci_awaiting_approval is true only
+#     when a working run-step current_state carries fm-classify-lib.sh's
+#     FM_CI_AWAITING_APPROVAL detail component (compared whole); it annotates
+#     the fresh read and never changes current_state.
 #     endpoint.exists is the cheap local backend endpoint-presence read.
 #     endpoint.agent_alive is populated for local secondmates only, where it is
 #     useful return-channel supervision data; remote secondmates use "unknown"
@@ -85,7 +88,11 @@
 #     observed status file's mtime instead: freshness is how fresh this snapshot's
 #     own observation is, never when a worker emitted the event.
 #     Each structured-home record carries active_children, decisions_open, holds,
-#     queued, landed, endpoints, counts, and omitted. provenance.summary_source
+#     queued, landed, endpoints, counts, and omitted. Each active child carries
+#     compact name and doing plus name_full and doing_full (1000 characters at
+#     most) for renderers that reveal clipped text, and ci_awaiting_approval
+#     copied from its task hint; ledgers published before those fields existed
+#     simply lack them. provenance.summary_source
 #     distinguishes "local-ledger", "remote-ledger", and "remote-ledger-cache";
 #     freshness is "cached" only for the cache source, and observed_at/age_seconds
 #     come from the selected summary's generation. Every successfully sampled home also carries
@@ -874,6 +881,7 @@ task_json_lines() {
       --arg agent_alive "$agent_alive" \
       --arg observed_at "$SNAPSHOT_NOW" \
       --arg last_event_raw "$last_event_raw" \
+      --arg ci_approval "$FM_CI_AWAITING_APPROVAL" \
       --argjson current_state "$current_json" \
       --argjson meta_path "$meta_json" \
       --argjson status_log "$status_json" \
@@ -916,7 +924,9 @@ task_json_lines() {
           blocked_event:$blocked_event,
           open_decisions:$open_decisions,
           scout_report_present:$report_present,
-          last_event_text:$last_event_raw
+          last_event_text:$last_event_raw,
+          ci_awaiting_approval:($current_state.state == "working" and $current_state.source == "run-step"
+            and ((($current_state.detail // "") | split(" · ") | index($ci_approval)) != null))
         },
         actions:(
           if $kind == "secondmate" then
@@ -1056,8 +1066,11 @@ secondmate_home_summary_json() {  # <backlog-json-file> <tasks-json-file>
          | {id,kind,state:.current_state.state,
             repo:(($work.repo // .project // null) | if . == null then null else trunc(120) end),
             name:(($work.title // null) | if . == null then null else trunc(70) end),
+            name_full:(($work.title // null) | if . == null then null else trunc(1000) end),
             source:.current_state.source,
-            doing:((.current_state.detail // "") | trunc(120))} ]) as $active_all
+            doing:((.current_state.detail // "") | trunc(120)),
+            doing_full:((.current_state.detail // "") | trunc(1000)),
+            ci_awaiting_approval:(.hints.ci_awaiting_approval == true)} ]) as $active_all
     | ($captain_holds_all
        + ([ $tasks[] as $t | ($t.hints.open_decisions // [])[]
             | {id:$t.id,key,verb,summary:(.summary | trunc(160)),reason:null,source:"status"} ])) as $decisions_all

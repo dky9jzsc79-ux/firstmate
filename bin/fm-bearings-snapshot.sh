@@ -29,8 +29,20 @@
 # from every readable secondmate ledger, independently of that home's
 # bearings_state. Each row's name is the durable task title when nonblank and
 # its durable task id otherwise, so renderers always receive a task-identifying
-# label instead of having to substitute run status. A home classified
-# captain_decision because it has an open
+# label instead of having to substitute run status.
+# Each row's status is exactly active or blocked, derived here from the
+# canonical current state without changing it: working is active unless its
+# fresh run read says CI workflows await maintainer approval
+# (hints.ci_awaiting_approval, or the same child ledger field), and a parked
+# gate is active unless an open needs-decision or blocked event is on record.
+# Every other state is blocked with a reason naming why - awaiting upstream CI
+# approval, awaiting a decision, external wait (a declared pause), worker
+# blocked, failed, awaiting landing (done), or status unverified (unknown,
+# missing, or unrecognized state, never shown as activity).
+# --fields fulltext emits every projected text field untruncated (whitespace
+# still normalized) so a renderer can clip visually and still reveal the whole
+# text; the default output stays compact.
+# A home classified captain_decision because it has an open
 # captain hold still contributes each working child as its own Underway row;
 # the home row on secondmates[] keeps the decision and gate classification.
 # Captain-hold placement follows the canonical snapshot's hold_bucket and
@@ -77,7 +89,7 @@
 #   (default)        compact projection with bounded remote-ledger collection, TOON
 #   --json           the same projected model as JSON (machine/debug; parity form)
 #   --include-prs    ALSO do live GitHub open-PR discovery + checks
-#   --fields <list>  opt in to dropped surfaces: bodies,paths,actions,endpoints
+#   --fields <list>  opt in to dropped surfaces: bodies,paths,actions,endpoints,fulltext
 #   --all-in-flight  include every in-flight task
 #   --all-decisions  include every open decision and captain hold in the bounded snapshot
 #   --all-secondmates include every aggregated secondmate record
@@ -145,7 +157,7 @@ Default collection performs bounded concurrent remote-ledger reads for registere
 remote homes under one shared snapshot budget and may refresh the parent-side cache.
 --include-prs additionally performs live GitHub discovery and checks.
 
-Default fields: schema, home, generated, prs, in_flight{id,kind,state,repo,name,doing},
+Default fields: schema, home, generated, prs, in_flight{id,kind,state,status,reason,repo,name,doing},
   secondmates{id,state,doing,provenance,freshness,age_seconds,contradiction,reason},
   secondmate_reconcile{id,spawn_gen,host,kind,ids},
   decisions_open{id,key,verb,summary,owner}, landed{id,what,artifact,owner},
@@ -163,7 +175,8 @@ For every registered secondmate, readable structured facts from its own home are
   Parent events and bounded terminal reads are labeled fallback or contradiction
   evidence and never become current work. The provenance and freshness fields
   distinguish live and cached ledgers; a home without either is explicitly unreadable.
-Opt-in surfaces: --fields bodies|paths|actions|endpoints, --all-in-flight,
+in_flight.status is exactly active or blocked; a blocked row's reason says why.
+Opt-in surfaces: --fields bodies|paths|actions|endpoints|fulltext (untruncated text), --all-in-flight,
   --all-decisions (all open decisions and captain holds in the bounded snapshot),
   --all-secondmates, --all-landed, --all-reports, --all-queued, --all-recorded-prs,
   --all-unhealthy, --all-pr-repos, --include-prs (adds candidate_prs).
@@ -205,6 +218,9 @@ while [ $# -gt 0 ]; do
 done
 
 command -v jq >/dev/null 2>&1 || { echo "fm-bearings-snapshot: jq not found" >&2; exit 1; }
+
+FULLTEXT=false
+case ",$(printf '%s' "$FIELDS" | tr -d '[:space:]')," in *,fulltext,*) FULLTEXT=true ;; esac
 
 # The shared read-only away-return owner is consulted, not obeyed. An active
 # away window still refuses here: the correct answer to a bearings request then
@@ -357,6 +373,7 @@ MODEL=$(printf '%s' "$SNAP" | jq \
   --arg today "$BEARINGS_TODAY" \
   --arg prs "$PR_STATUS" \
   --arg fields "$FIELDS" \
+  --argjson fulltext "$FULLTEXT" \
   --argjson landed_n "$FM_BEARINGS_LANDED" \
   --argjson landed_per_home_n "$FM_BEARINGS_LANDED_PER_HOME" \
   --argjson in_flight_n "$FM_BEARINGS_IN_FLIGHT" \
@@ -382,12 +399,25 @@ MODEL=$(printf '%s' "$SNAP" | jq \
   --argjson return_catchup "$RETURN_CATCHUP" \
   --argjson candidate_prs "$CANDIDATE_PRS" "$FM_LANDED_JQ_DEFS"'
   def trunc($n): if . == null then null else
-    (tostring | gsub("\\s+"; " ") | if (length > $n) then (.[:$n] + "…") else . end) end;
+    (tostring | gsub("\\s+"; " ") | if ($fulltext | not) and (length > $n) then (.[:$n] + "…") else . end) end;
   def fit($n):
     tostring | gsub("\\s+"; " ")
-    | if $n <= 0 then ""
+    | if $fulltext then .
+      elif $n <= 0 then ""
       elif length > $n then (if $n == 1 then "…" else (.[:($n - 1)] + "…") end)
       else . end;
+  def underway_status($state; $open_decision; $ci_approval):
+    if $state == "working" then
+      (if $ci_approval then {status:"blocked", reason:"awaiting upstream CI approval"}
+       else {status:"active", reason:null} end)
+    elif $state == "paused" then {status:"blocked", reason:"external wait"}
+    elif $state == "parked" then
+      (if $open_decision then {status:"blocked", reason:"awaiting a decision"}
+       else {status:"active", reason:null} end)
+    elif $state == "blocked" then {status:"blocked", reason:"worker blocked"}
+    elif $state == "failed" then {status:"blocked", reason:"failed"}
+    elif $state == "done" then {status:"blocked", reason:"awaiting landing"}
+    else {status:"blocked", reason:"status unverified"} end;
   def live_captain_call: .hold_bucket == "live";
   def projected_deferred_hold:
     .hold_bucket != null and .hold_bucket != "live";
@@ -504,8 +534,13 @@ MODEL=$(printf '%s' "$SNAP" | jq \
        | select(.kind != "secondmate")
        | select(.backlog.current_role != "program")
        | select(.backlog.current_role != "held" or .current_state.state == "working")
+       | underway_status(.current_state.state;
+                         (.hints.pending_decision == true or .hints.blocked_event == true);
+                         (.hints.ci_awaiting_approval == true)) as $st
        | {id, kind,
         state: .current_state.state,
+        status: $st.status,
+        reason: $st.reason,
         repo:(.backlog.repo // .project // null),
         name:((.backlog.title // "") as $name
               | (if ($name | test("[^[:space:]]")) then $name else .id end) | trunc(70)),
@@ -514,14 +549,17 @@ MODEL=$(printf '%s' "$SNAP" | jq \
       } ]
      + [ $secondmate_views[] as $m
          | $m.active_children[]?
+         | underway_status(.state; false; (.ci_awaiting_approval == true)) as $st
          | {id:($m.id + "/" + .id),
             kind:(.kind // "secondmate"),
-            state:(.state // "working"),
+            state:(.state // "unknown"),
+            status:$st.status,
+            reason:$st.reason,
             repo:(.repo // null),
-            name:((.name // "") as $name
+            name:((.name_full // .name // "") as $name
                   | (if (($name | type) == "string" and ($name | test("[^[:space:]]")))
                      then $name else ($m.id + "/" + .id) end) | trunc(70)),
-            doing:((.doing // .state) | trunc(90))} ]) as $in_flight_all
+            doing:((.doing_full // .doing // .state // "no current state reported") | trunc(90))} ]) as $in_flight_all
   | ([ .backlog.records[]
          | . as $record
          | select(.structured and .hold_bucket != null)
@@ -659,6 +697,7 @@ MODEL=$(printf '%s' "$SNAP" | jq \
   | . + (if $f_endpoints then {endpoints:[ $snap.tasks[] | {id, backend, target:(.endpoint.target // "-"), exists:.endpoint.exists, agent:.endpoint.agent_alive} ]} else {} end)
   | . + {omitted: (
       [ (if $f_bodies then empty else {surface:"backlog item bodies", reveal:"--fields bodies"} end),
+        (if $fulltext then empty else {surface:"untruncated text", reveal:"--fields fulltext"} end),
         (if $f_paths then empty else {surface:"task paths", reveal:"--fields paths"} end),
         (if $f_actions then empty else {surface:"watch/steer actions", reveal:"--fields actions"} end),
         (if $f_endpoints then empty else {surface:"healthy endpoint detail", reveal:"--fields endpoints"} end),

@@ -221,6 +221,52 @@ test_an_underway_row_leads_with_the_task_name_and_keeps_its_run_status() {
   pass "an underway row leads with the task name and still reports its run status"
 }
 
+# The badge says exactly active or blocked, and a blocked row leads its second
+# line with why; a payload composed before status existed keeps its state word.
+test_an_underway_row_badges_active_or_blocked_with_its_reason() {
+  local home out
+  home=$(make_home underway-status)
+  out=$(render_board "$home" '[
+    {"id":"a","repo":"firstmate","name":"Active task","state":"working","kind":"ship",
+     "doing":"validating (running)","status":"active","reason":null},
+    {"id":"b","repo":"firstmate","name":"Held task","state":"working","kind":"ship",
+     "doing":"validating (running)","status":"blocked","reason":"awaiting upstream CI approval"},
+    {"id":"c","repo":"firstmate","name":"Legacy task","state":"parked","kind":"ship",
+     "doing":"parked at review"}
+  ]' '[]')
+  printf '%s' "$out" | jq -e '
+    (.underway | length) == 3
+      and (.underway[0] | .badges == [{"tone":"online","text":"active"}]
+           and (.sub | startswith("validating (running) · ")))
+      and (.underway[1] | .badges == [{"tone":"warn","text":"blocked"}]
+           and (.sub | startswith("awaiting upstream CI approval: validating (running) · ")))
+      and (.underway[2] | .badges == [{"tone":"info","text":"parked"}])
+  ' >/dev/null || fail "an underway row did not badge active or blocked with its reason: $out"
+  pass "an underway row badges active or blocked and a blocked row says why"
+}
+
+# Text wider than its row is clipped by CSS; the page marks exactly that text as
+# revealable, carries the whole payload text as its tooltip, makes it keyboard
+# focusable, and toggles it open on a tap and closed again on Enter.
+test_clipped_text_reveals_the_whole_payload_text() {
+  local home out long
+  home=$(make_home clipped-text)
+  long="Upstream option: home-local bearings board template via config/bearings-board-template"
+  out=$(render_board "$home" "$(jq -n --arg long "$long" '[
+    {"id":"a","repo":"firstmate","name":$long,"state":"working","kind":"ship",
+     "doing":"ok","status":"active","reason":null}]')" '[]')
+  printf '%s' "$out" | jq -e --arg long "$long" '
+    (.underway[0].clip.title | .clipped == true and .tip == $long
+       and .tabindex == "0" and .role == "button" and .ariaExpanded == "false")
+      and (.underway[0].clip.sub | .clipped == false and .tip == null
+       and .tabindex == null and .role == null)
+      and (.clipTap.text == $long)
+      and (.clipTap.afterTap | .expanded == true and .ariaExpanded == "true")
+      and (.clipTap.afterEnter | .expanded == false and .ariaExpanded == "false")
+  ' >/dev/null || fail "clipped text did not reveal the whole payload text: $out"
+  pass "clipped text reveals the whole payload text on hover, focus, tap, and keys"
+}
+
 test_an_underway_identifier_label_is_not_replaced_by_run_status() {
   local home out
   home=$(make_home underway-identifier)
@@ -268,6 +314,8 @@ test_charted_rows_without_a_filed_date_follow_the_dated_rows_in_payload_order() 
 
 test_an_underway_row_leads_with_the_task_name_and_keeps_its_run_status
 test_an_underway_identifier_label_is_not_replaced_by_run_status
+test_an_underway_row_badges_active_or_blocked_with_its_reason
+test_clipped_text_reveals_the_whole_payload_text
 test_charted_next_reads_newest_filed_first
 test_charted_rows_without_a_filed_date_follow_the_dated_rows_in_payload_order
 test_a_warning_row_reads_as_a_repair_not_as_queued_work

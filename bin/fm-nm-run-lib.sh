@@ -116,11 +116,21 @@ fm_nm_head_matches_worktree() {  # <worktree> <run_head>
 # The coarse `no-mistakes runs` ledger emits database status words; an
 # `axi status` run object reports its terminal result through its own outcome
 # field as well, which fm_nm_run_is_active below checks directly.
+# ci_monitor_interrupted is no-mistakes' own terminal word (RunStatus.Terminal()
+# since v1.84.0) for a run whose daemon restarted while it monitored CI on an
+# already-created PR: the PR stays open and the run is never resumed.
+# These two word lists are the one vocabulary; fm_nm_select_run reads them too.
+FM_NM_LIVE_STATUS_WORDS='pending running'
+FM_NM_TERMINAL_STATUS_WORDS='completed failed cancelled ci_monitor_interrupted'
 fm_nm_run_status_class() {  # <status_word>
   case "${1:-}" in
-    completed|failed|cancelled) printf 'terminal' ;;
-    pending|running)            printf 'live' ;;
-    *)                          printf 'unknown' ;;
+    ''|*[!a-z_-]*) printf 'unknown' ;;
+    *)
+      case " $FM_NM_TERMINAL_STATUS_WORDS | $FM_NM_LIVE_STATUS_WORDS " in
+        *" $1 "*"|"*) printf 'terminal' ;;
+        *"|"*" $1 "*) printf 'live' ;;
+        *)            printf 'unknown' ;;
+      esac ;;
   esac
 }
 
@@ -149,7 +159,12 @@ fm_nm_run_status_class() {  # <status_word>
 # The newest same-branch row is the candidate regardless of outcome: an older
 # live run must not hide a newer failure. If the newest is live and another
 # same-branch live run exists, neither has exclusive authority: report all
-# candidate ids as unknown. A newer live row can replace cancelled history,
+# candidate ids as unknown.
+# The status column is checked against fm_nm_run_status_class's vocabulary.
+# An unrecognized word on the newest row, or on an older row while the newest
+# is live (it could be a competing live run), reports unknown naming that word;
+# older history cannot outrank a recognized terminal newest row, so its words
+# are not needed there. A newer live row can replace cancelled history,
 # but the caller must fetch its full status BY ID and prove branch/head,
 # executing status, or active pipeline custody before using its steps.
 # Never reuse another run's gate detail.
@@ -162,7 +177,9 @@ fm_nm_run_status_class() {  # <status_word>
 fm_nm_select_run() {  # <branch> <axi-overview> <worktree> [timeout_secs]
   local selection inventory available_ids timeout_secs=${4:-10}
   case "$timeout_secs" in ''|*[!0-9]*) timeout_secs=10 ;; esac
-  selection=$(printf '%s\n' "$2" | awk -v branch="$1" '
+  selection=$(printf '%s\n' "$2" | awk -v branch="$1" \
+    -v words="$FM_NM_LIVE_STATUS_WORDS $FM_NM_TERMINAL_STATUS_WORDS" '
+    BEGIN { n = split(words, w, " "); for (i = 1; i <= n; i++) vocab[w[i]] = 1 }
     function scalar(s) {
       sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s)
       if (s ~ /^".*"$/) s = substr(s, 2, length(s)-2)
@@ -212,9 +229,12 @@ fm_nm_select_run() {  # <branch> <axi-overview> <worktree> [timeout_secs]
           st !~ /^[a-z_-]+$/ || head !~ /^[a-fA-F0-9]+$/ || length(head) < 7 || length(head) > 40) {
         invalid_run = 1; next
       }
-      if (first == "") { first = id; first_status = st }
+      recognized = (st in vocab)
+      if (first == "") {
+        first = id; first_status = st
+        if (!recognized) newest_unknown = st
+      } else if (!recognized && older_unknown == "") older_unknown = st
       if (st == "running" || st == "pending") live++
-      if (st !~ /^(pending|running|completed|failed|cancelled)$/) unknown_status = 1
       next
     }
     inrows { inrows = 0 }
@@ -224,7 +244,10 @@ fm_nm_select_run() {  # <branch> <axi-overview> <worktree> [timeout_secs]
         print "unknown|unreadable runs table; run ids: " ids
       else if ((shown+0) < (total+0)) print "incomplete|" ids
       else if (invalid_run) print "unknown|unreadable runs table; run ids: " ids
-      else if (unknown_status) print "unknown|unrecognized run status; run ids: " ids
+      else if (newest_unknown != "")
+        print "unknown|unrecognized run status " newest_unknown "; run ids: " ids
+      else if (older_unknown != "" && (first_status == "running" || first_status == "pending"))
+        print "unknown|unrecognized run status " older_unknown "; run ids: " ids
       else if (first == "") print "absent"
       else if ((first_status == "running" || first_status == "pending") && live > 1)
         print "unknown|competing live runs; run ids: " ids
@@ -342,7 +365,7 @@ fm_nm_run_is_active() {  # <toon-output>
   status=$(fm_nm_strip_quotes "$(fm_nm_field "$1" status)")
   outcome=$(fm_nm_strip_quotes "$(fm_nm_field "$1" outcome)")
   [ -z "$outcome" ] || return 1
-  case "$status" in completed|failed|cancelled) return 1 ;; esac
+  [ "$(fm_nm_run_status_class "$status")" != terminal ]
 }
 
 # The custody exemption to the head rule above: while the pipeline OWNS the
@@ -395,7 +418,7 @@ fm_nm_run_is_parked() {  # <toon-output>
 # daemon-down probe for exactly that reason.
 # All four accepted words reach here on BOTH surfaces. The overview table
 # fm_nm_select_run validates carries a narrower column
-# (pending|running|completed|failed|cancelled, its unknown_status check), but that column is not
+# (fm_nm_run_status_class's vocabulary, its unrecognized-status check), but that column is not
 # what this predicate reads: the selected-run route re-reads the run by id and
 # passes that DETAIL object, whose own vocabulary check admits `fixing` and `ci`
 # as live, and the legacy bare-status route passes the same detail shape.

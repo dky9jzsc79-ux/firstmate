@@ -2492,6 +2492,14 @@ crew_is_paused() {  # <id>
 # crew_gate_awaits_human_decision below is its only consumer.
 FM_GATE_HUMAN_DECISION='ask-user: authority decision'
 
+# The one spelling of the verdict component that says a working run's CI monitor
+# is waiting only because the forge holds its workflows for a maintainer's
+# approval, so no job has run. bin/fm-crew-state.sh mints it from the ci step's
+# latest log marker (nm_ci_checks_state); it annotates a working run and never
+# changes its lifecycle state. bin/fm-fleet-snapshot.sh publishes it as
+# hints.ci_awaiting_approval by the same whole-component equality.
+FM_CI_AWAITING_APPROVAL='external wait: CI workflows await maintainer approval'
+
 # 0 if crew <id>'s authoritative current state is a no-mistakes gate whose answer
 # is owed by a human rather than by the crewmate itself.
 #

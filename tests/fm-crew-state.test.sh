@@ -700,6 +700,34 @@ steps[9]{step,status,findings,duration_ms}:
 EOF
 }
 
+# no-mistakes v1.84.0's own record of that shape, captured from a live run:
+# the daemon restarted while the ci step monitored an already-created PR, so the
+# run is terminal `ci_monitor_interrupted` with the ci step skipped.
+run_ci_monitor_interrupted() {  # <branch>
+  cat <<EOF
+run:
+  id: "01RUN"
+  branch: $1
+  status: ci_monitor_interrupted
+  head: "${FM_FAKE_RUN_HEAD:-abc1234}"
+  verification_plan: none
+  pr: "https://github.com/o/r/pull/204"
+  findings: 1 awaiting
+  steps[9]{step,status,findings,duration_ms}:
+    intent,completed,0,3
+    rebase,completed,0,653
+    review,completed,0,346922
+    test,completed,0,651318
+    document,completed,0,199625
+    lint,completed,0,588744
+    push,completed,0,2821
+    pr,completed,0,22734
+    ci,skipped,1,245549
+outcome: ci-monitor-interrupted
+error: ci monitor interrupted by daemon restart; PR remains open
+EOF
+}
+
 # Same shape but with no outcome line: only top-level status reads failed.
 run_failed_ci_orphan_status_only() {  # <branch>
   cat <<EOF
@@ -1306,6 +1334,45 @@ test_ci_monitoring_still_waiting_stays_working() {
   assert_contains "$out" "state: working" "ci step still red -> working"
   assert_not_contains "$out" "checks green" "no green marker present -> no checks-green detail"
   pass "ci-monitoring run with checks not yet green stays working"
+}
+
+# The live 2026-09-30 no-mistakes v1.84.0 ci log of a fork PR whose workflows
+# the forge holds for a maintainer's approval. The run stays working - nothing
+# about its monitoring or pause lifecycle changes - but the wait is disclosed as
+# the one minted component, even when a stale status line claims CI is ready.
+test_ci_monitoring_held_for_approval_discloses_the_wait() {
+  reset_fakes
+  local d out; d=$(new_case ci-held-approval)
+  make_repo_on_branch "$d/wt" fm/feat-ciheld
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-ciheld.meta" "window=fm:fm-feat-ciheld" "worktree=$d/wt" "kind=ship"
+  FM_FAKE_AXI_STATUS="$(run_ci_monitoring fm/feat-ciheld)"
+  FM_FAKE_CI_LOGS=$(cat <<'EOF'
+monitoring CI for PR #6248 (timeout: 168h0m0s)...
+
+CI repair policy: publish a repair whose continuity with the reviewed head is provable, otherwise restart validation from Review (ci.revalidate_repairs: false)
+
+CI workflows are held awaiting maintainer approval - no jobs have run, waiting...
+EOF
+)
+  out=$(run_crew_state "$d" feat-ciheld)
+  assert_contains "$out" "state: working" "a held-for-approval monitor keeps its working lifecycle"
+  assert_contains "$out" "source: run-step" "the run answers"
+  assert_contains "$out · " " · $FM_CI_AWAITING_APPROVAL · " "the approval wait is its own whole component"
+  printf 'done: PR https://github.com/o/r/pull/2 checks green\n' > "$d/state/feat-ciheld.status"
+  out=$(run_crew_state "$d" feat-ciheld)
+  assert_contains "$out" "state: working" "a stale CI-ready claim does not outrank the held ci log"
+  assert_contains "$out" "$FM_CI_AWAITING_APPROVAL" "the fresh approval wait is still disclosed"
+  FM_FAKE_CI_LOGS=$(cat <<'EOF'
+CI workflows are held awaiting maintainer approval - no jobs have run, waiting...
+CI checks running, waiting for results...
+EOF
+)
+  : > "$d/state/feat-ciheld.status"
+  out=$(run_crew_state "$d" feat-ciheld)
+  assert_contains "$out" "state: working" "approved workflows keep monitoring"
+  assert_not_contains "$out" "maintainer approval" "an approval later granted is no longer disclosed"
+  pass "a CI monitor held for maintainer approval stays working and discloses the wait"
 }
 
 # A later merge-conflict auto-fix round after an earlier green reading must
@@ -5334,6 +5401,99 @@ test_newer_failed_run_is_not_hidden_by_older_live_run() {
   pass 'newer failed run remains failed beside an older live run'
 }
 
+# Live 2026-09-30 shape (no-mistakes v1.84.0): a fresh run is monitoring CI
+# while the branch's previous run is terminal `ci_monitor_interrupted`. That
+# history word must not turn the whole selection unknown.
+test_live_run_beside_interrupted_ci_monitor_reads_working() {
+  make_competing_runs_case interrupted-history running ci_monitor_interrupted
+  local d=$TMP_ROOT/interrupted-history out
+  FM_FAKE_AXI_STATUS="$(run_running fm/competing | sed 's/01RUN/01NEW/')"
+  FM_FAKE_AXI_STATUS_RUN=$FM_FAKE_AXI_STATUS
+  out=$(run_crew_state "$d" competing)
+  assert_contains "$out" 'state: working' 'a live run beside interrupted history reads working'
+  assert_contains "$out" 'source: run-step' 'the live run answers'
+  assert_contains "$out" 'run: 01NEW' 'the newest run is the selected run'
+  assert_not_contains "$out" 'unrecognized' 'ci_monitor_interrupted is recognized vocabulary'
+  pass 'a live run beside an interrupted CI monitor reads working'
+}
+
+# The interrupted run itself is terminal: nothing monitors the open PR any more,
+# so unless its checks already read green it is a real blocker, never unknown.
+test_selected_interrupted_ci_monitor_reads_blocked() {
+  make_competing_runs_case interrupted-newest ci_monitor_interrupted failed
+  local d=$TMP_ROOT/interrupted-newest out
+  FM_FAKE_RUN_HEAD=$(git -C "$d/wt" rev-parse HEAD)
+  FM_FAKE_AXI_STATUS="$(run_ci_monitor_interrupted fm/competing | sed 's/01RUN/01NEW/')"
+  FM_FAKE_AXI_STATUS_RUN=$FM_FAKE_AXI_STATUS
+  FM_FAKE_CI_LOGS="CI workflows are held awaiting maintainer approval - no jobs have run, waiting..."
+  out=$(run_crew_state "$d" competing)
+  assert_contains "$out" 'state: blocked' 'an interrupted monitor without green checks is blocked'
+  assert_contains "$out" 'ci monitor interrupted by daemon restart' 'the blocker names its cause'
+  assert_contains "$out" 'https://github.com/o/r/pull/204' 'the blocker names the unmonitored PR'
+  assert_not_contains "$out" 'state: unknown' 'an interrupted monitor is never unknown'
+  pass 'a selected interrupted CI monitor reads blocked with its PR'
+}
+
+test_interrupted_ci_monitor_after_green_reads_done() {
+  make_competing_runs_case interrupted-green ci_monitor_interrupted failed
+  local d=$TMP_ROOT/interrupted-green out
+  FM_FAKE_RUN_HEAD=$(git -C "$d/wt" rev-parse HEAD)
+  FM_FAKE_AXI_STATUS="$(run_ci_monitor_interrupted fm/competing | sed 's/01RUN/01NEW/')"
+  FM_FAKE_AXI_STATUS_RUN=$FM_FAKE_AXI_STATUS
+  FM_FAKE_CI_LOGS="all CI checks passed - still monitoring until merged or closed"
+  out=$(FM_FAKE_PR_STATE=OPEN FM_FAKE_PR_MERGED=false run_crew_state "$d" competing)
+  assert_contains "$out" 'state: done' 'an interrupted monitor after green checks is held for merge'
+  assert_contains "$out" 'PR held for merge' 'the held-green detail is reported'
+  pass 'an interrupted CI monitor after green checks reads held-for-merge done'
+}
+
+# Unrecognized words stay conservative exactly where they could matter: on the
+# newest row, or on older history while the newest run is live (a possible
+# competing live run). Each unknown names the word it could not classify.
+test_unrecognized_run_status_names_the_word() {
+  local d out
+  make_competing_runs_case unrecognized-newest quarantined failed
+  d=$TMP_ROOT/unrecognized-newest
+  FM_FAKE_AXI_STATUS="$(run_failed fm/competing | sed 's/01RUN/01OLD/')"
+  out=$(run_crew_state "$d" competing)
+  assert_contains "$out" 'state: unknown' 'an unrecognized newest status is unverified'
+  assert_contains "$out" 'unrecognized run status quarantined' 'the unknown names the unrecognized word'
+  make_competing_runs_case unrecognized-older-live running quarantined
+  d=$TMP_ROOT/unrecognized-older-live
+  FM_FAKE_AXI_STATUS="$(run_running fm/competing | sed 's/01RUN/01NEW/')"
+  FM_FAKE_AXI_STATUS_RUN=$FM_FAKE_AXI_STATUS
+  out=$(run_crew_state "$d" competing)
+  assert_contains "$out" 'state: unknown' 'an unrecognized older row beside a live newest run stays unverified'
+  assert_contains "$out" 'unrecognized run status quarantined' 'the older unrecognized word is named'
+  make_competing_runs_case unrecognized-older-terminal failed quarantined
+  d=$TMP_ROOT/unrecognized-older-terminal
+  FM_FAKE_RUN_HEAD=$(git -C "$d/wt" rev-parse HEAD)
+  FM_FAKE_AXI_STATUS="$(run_failed fm/competing | sed 's/01RUN/01NEW/')"
+  FM_FAKE_AXI_STATUS_RUN=$FM_FAKE_AXI_STATUS
+  out=$(run_crew_state "$d" competing)
+  assert_contains "$out" 'state: failed' 'a terminal newest run decides over unrecognized older history'
+  assert_contains "$out" 'run: 01NEW' 'the newest terminal run is the selected run'
+  pass 'unrecognized run status is named and stays conservative only where it matters'
+}
+
+# The legacy coarse ledger carries the same word; it reads blocked there too.
+test_coarse_ledger_interrupted_ci_monitor_reads_blocked() {
+  reset_fakes
+  local d short out
+  d=$(new_case coarse-interrupted)
+  make_repo_on_branch "$d/wt" fm/feat-coarse-int
+  short=$(git -C "$d/wt" rev-parse --short=7 HEAD)
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/coarse-int.meta" "window=fm:fm-coarse-int" "worktree=$d/wt" "kind=ship"
+  FM_FAKE_AXI_STATUS="$(run_running fm/other-crew)"
+  FM_FAKE_RUNS_LIST="  running    fm/other-crew aaaaaaa  2026-09-30 16:19
+  ci_monitor_interrupted fm/feat-coarse-int ${short}  2026-09-30 11:56  https://github.com/o/r/pull/204"
+  out=$(run_crew_state "$d" coarse-int)
+  assert_contains "$out" 'state: blocked' 'a coarse interrupted-monitor row reads blocked'
+  assert_contains "$out" 'ci monitor interrupted by daemon restart' 'the coarse blocker names its cause'
+  pass 'a coarse ledger interrupted CI monitor reads blocked'
+}
+
 test_unverifiable_run_selection_reports_unknown() {
   local mode rc=0
   for mode in missing wrong-id wrong-branch wrong-head missing-status malformed-table inventory-error selected-error; do
@@ -5538,6 +5698,7 @@ test_ci_monitoring_green_then_rearm_stays_green
 test_ci_monitoring_green_before_log_tail_stays_green
 test_ci_monitoring_no_checks_yet_stays_working
 test_ci_monitoring_still_waiting_stays_working
+test_ci_monitoring_held_for_approval_discloses_the_wait
 test_ci_monitoring_green_then_new_issue_stays_working
 test_ci_ready_done_log_relapse_stays_working
 test_ci_fixing_after_green_stays_working
@@ -5684,6 +5845,11 @@ test_coarse_live_rebased_row_is_not_attributed
 test_terminal_rebased_run_is_not_attributed
 test_competing_live_runs_report_unknown_with_both_ids
 test_newer_failed_run_is_not_hidden_by_older_live_run
+test_live_run_beside_interrupted_ci_monitor_reads_working
+test_selected_interrupted_ci_monitor_reads_blocked
+test_interrupted_ci_monitor_after_green_reads_done
+test_unrecognized_run_status_names_the_word
+test_coarse_ledger_interrupted_ci_monitor_reads_blocked
 test_unverifiable_run_selection_reports_unknown
 test_legacy_conflicting_run_records_report_unknown
 

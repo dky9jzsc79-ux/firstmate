@@ -36,6 +36,13 @@ make_fakebin() {  # <dir>
   cat > "$fb/no-mistakes" <<'SH'
 #!/usr/bin/env bash
 [ "${FAKE_NM_SLEEP:-0}" = 1 ] && sleep 30
+# A worktree may carry its own run record and ci log inside .git, so one fleet
+# can hold several validating ships; everything else answers nothing.
+case "${1:-} ${2:-}" in
+  "axi ") [ ! -f .git/fake-nm-overview ] || cat .git/fake-nm-overview ;;
+  "axi status") [ ! -f .git/fake-nm-status ] || cat .git/fake-nm-status ;;
+  "axi logs") [ ! -f .git/fake-nm-ci-log ] || cat .git/fake-nm-ci-log ;;
+esac
 exit 0
 SH
   cat > "$fb/tmux" <<'SH'
@@ -2448,6 +2455,144 @@ EOF
   pass "active children reach Underway independently of a home captain hold"
 }
 
+# Underway status is exactly active or blocked, derived from the canonical
+# current state. The CI-approval row is the live 2026-09-30 shape: a working
+# no-mistakes run whose ci log says the fork workflows await maintainer approval,
+# beside the branch's earlier run left terminal ci_monitor_interrupted.
+test_underway_status_is_active_or_blocked_with_a_reason() {
+  local home fakebin json wt
+  home=$(make_home underway-status)
+  : > "$home/data/secondmates.md"
+  cat > "$home/data/backlog.md" <<'EOF'
+## In flight
+- [ ] busy-ship - Busy ship (repo: firstmate) (kind: ship) (since 2026-07-09)
+- [ ] held-ship - Held ship (repo: firstmate) (kind: ship) (since 2026-07-09)
+- [ ] paused-ship - Paused ship (repo: firstmate) (kind: ship) (since 2026-07-09)
+- [ ] dead-ship - Dead ship (repo: firstmate) (kind: ship) (since 2026-07-09)
+
+## Queued
+
+## Done
+EOF
+  for id in busy-ship held-ship paused-ship dead-ship; do
+    mkdir -p "$home/projects/$id"
+    fm_write_meta "$home/state/$id.meta" \
+      "window=firstmate:fm-$id" "worktree=$home/projects/$id" "project=firstmate" \
+      "harness=claude" "kind=ship" "mode=no-mistakes"
+  done
+  record_claude_state "$home/state" busy-ship busy
+  printf 'working: implementing\n' > "$home/state/busy-ship.status"
+  record_claude_state "$home/state" paused-ship idle
+  printf 'paused: waiting for the upstream release\n' > "$home/state/paused-ship.status"
+  printf 'working: implementing\n' > "$home/state/dead-ship.status"
+
+  wt="$home/projects/held-ship"
+  git -C "$wt" init -q
+  git -C "$wt" -c user.name=fixture -c user.email=fixture@example.invalid commit -q --allow-empty -m init
+  git -C "$wt" checkout -q -b fm/held-ship
+  record_claude_state "$home/state" held-ship idle
+  printf 'paused: PR awaits upstream CI workflow approval\n' > "$home/state/held-ship.status"
+  cat > "$wt/.git/fake-nm-overview" <<EOF
+count: 2 of 2 total
+runs[2]{id,branch,status,head,pr}:
+  "01HELD",fm/held-ship,running,$(git -C "$wt" rev-parse --short=8 HEAD),"https://github.com/o/r/pull/7"
+  "01OLD",fm/held-ship,ci_monitor_interrupted,$(git -C "$wt" rev-parse --short=8 HEAD),"https://github.com/o/r/pull/7"
+EOF
+  cat > "$wt/.git/fake-nm-status" <<EOF
+run:
+  id: "01HELD"
+  branch: fm/held-ship
+  status: running
+  head: "$(git -C "$wt" rev-parse HEAD)"
+  pr: "https://github.com/o/r/pull/7"
+  findings: none
+  steps[4]{step,status,findings,duration_ms}:
+    intent,completed,0,0
+    review,completed,0,0
+    push,completed,0,0
+    ci,running,0,0
+EOF
+  printf '%s\n' 'monitoring CI for PR #7 (timeout: 168h0m0s)...' \
+    'CI workflows are held awaiting maintainer approval - no jobs have run, waiting...' \
+    > "$wt/.git/fake-nm-ci-log"
+
+  fakebin=$(make_fakebin "$home")
+  json=$(run "$home" "$fakebin" --json)
+  printf '%s' "$json" | jq -e '
+    def row($id): first(.in_flight[] | select(.id == $id));
+    ([.in_flight[].status] | all(. == "active" or . == "blocked"))
+      and (row("busy-ship") | .state == "working" and .status == "active" and .reason == null)
+      and (row("held-ship") | .state == "working" and .status == "blocked"
+           and .reason == "awaiting upstream CI approval")
+      and (row("paused-ship") | .state == "paused" and .status == "blocked" and .reason == "external wait")
+      and (row("dead-ship") | .state == "unknown" and .status == "blocked" and .reason == "status unverified")
+  ' >/dev/null || fail "Underway status is not exactly active or blocked with its reason: $json"
+  rm "$wt/.git/fake-nm-ci-log"
+  json=$(run "$home" "$fakebin" --json)
+  printf '%s' "$json" | jq -e '
+    first(.in_flight[] | select(.id == "held-ship"))
+    | .state == "working" and .status == "active" and .reason == null
+  ' >/dev/null || fail "a monitored run with no approval marker did not read active: $json"
+  pass "Underway status is exactly active or blocked, naming the CI approval wait"
+}
+
+# Child rows read the ledger's full-text and CI-approval fields when present;
+# a ledger written before they existed, or a child with no state, still yields a
+# truthful row. --fields fulltext is the only way to receive untruncated text.
+test_child_status_and_full_text_across_ledger_versions() {
+  local parent remote_home fakebin json long_name long_doing
+  parent=$(make_home child-status-fulltext)
+  make_remote_ledger_fleet "$parent" 1
+  remote_home="$TMP_ROOT/remote-ledger-home-1"
+  fakebin=$(make_remote_ledger_ssh "$parent/remote-ssh")
+  long_name="Upstream option: home-local bearings board template via config/bearings-board-template, kept compact by default"
+  long_doing="validating (running) · external wait: CI workflows await maintainer approval · run: 01M3T2Z1W26M0HV69MKB3DTBDH"
+  jq --arg name "$long_name" --arg doing "$long_doing" '
+    .active_children = [
+      {id:"legacy-child",kind:"ship",state:"working",repo:null,
+       name:"Legacy child",source:"remote-ledger",doing:"running review"},
+      {id:"held-child",kind:"ship",state:"working",repo:"firstmate",source:"remote-ledger",
+       name:($name[:70] + "…"),name_full:$name,
+       doing:($doing[:120] + "…"),doing_full:$doing,ci_awaiting_approval:true},
+      {id:"stateless-child",kind:"ship",repo:null,name:"Stateless child",source:"remote-ledger"}
+    ]
+    | .counts.active_children = 3
+    | .state = "active_child_work"
+  ' "$remote_home/state/home-summary.json" > "$remote_home/state/versioned-summary.json"
+  mv "$remote_home/state/versioned-summary.json" "$remote_home/state/home-summary.json"
+
+  json=$(run_remote_ledger_bearings "$parent" "$fakebin" 1100) \
+    || fail "versioned ledger bearings failed"
+  printf '%s' "$json" | jq -e --arg name "$long_name" '
+    def row($id): first(.in_flight[] | select(.id == $id));
+    (row("ledger-1/legacy-child") | .status == "active" and .reason == null
+       and .doing == "running review")
+      and (row("ledger-1/held-child") | .status == "blocked"
+       and .reason == "awaiting upstream CI approval"
+       and (.name | endswith("…")) and (.name | length) == 71
+       and (.name[:70] as $shown | $name | startswith($shown)))
+      and (row("ledger-1/stateless-child") | .state == "unknown" and .status == "blocked"
+       and .reason == "status unverified" and .doing == "no current state reported")
+      and any(.omitted[]; .surface == "untruncated text" and .reveal == "--fields fulltext")
+  ' >/dev/null || fail "child rows did not read status across ledger versions: $json"
+
+  json=$(FM_HOME="$parent" FM_ROOT_OVERRIDE="$ROOT" FM_SSH_BIN="$fakebin/fake-ssh" \
+    FM_TEST_LEDGER_CALL_LOG="$parent/ledger-calls.log" \
+    FM_TEST_LEDGER_PID_LOG="$parent/ledger-pids.log" \
+    FM_TEST_LEDGER_ACTIVE_DIR="$parent/ledger-active" \
+    FM_SNAPSHOT_CACHE_DIR="$parent/state/summary-cache" \
+    FM_SNAPSHOT_BUDGET=15 FM_SNAPSHOT_NOW_EPOCH=1100 \
+    FM_BEARINGS_NOW=2026-09-01T22:00:00Z "$BEARINGS" --json --fields fulltext) \
+    || fail "fulltext bearings failed"
+  printf '%s' "$json" | jq -e --arg name "$long_name" --arg doing "$long_doing" '
+    first(.in_flight[] | select(.id == "ledger-1/held-child"))
+    | .name == $name and .doing == $doing
+  ' >/dev/null || fail "--fields fulltext did not carry the whole child text: $json"
+  printf '%s' "$json" | jq -e 'all(.omitted[]; .surface != "untruncated text")' >/dev/null \
+    || fail "fulltext output still disclosed untruncated text as omitted: $json"
+  pass "child status and full text read correctly across ledger versions"
+}
+
 test_nameless_legacy_summary_uses_its_durable_identifier() {
   local parent remote_home fakebin json
   parent=$(make_home nameless-legacy-summary)
@@ -2578,6 +2723,13 @@ EOF
       and (.gates | any(.id == "older-gate" and .filed == "2026-07-01"))
       and (.gates | any(.id == "undated-gate" and .filed == null))
   ' >/dev/null || fail "durable Underway names or gate filed dates are missing: $json"
+  jq -e '
+    first(.active_children[] | select(.id == "mate-child"))
+    | .name_full == "Tighten the ledger contract"
+      and (.doing_full | type == "string") and (.doing_full | length) > 0
+      and .ci_awaiting_approval == false
+  ' "$mate/state/home-summary.json" >/dev/null \
+    || fail "the secondmate ledger does not carry full text and the CI-approval field: $(cat "$mate/state/home-summary.json")"
   pass "Underway rows carry the durable task name and gates carry their filed date"
 }
 
@@ -3394,6 +3546,8 @@ test_main_orphan_counterfactual_meta_clears_inventory_warning
 test_working_captain_holds_keep_their_bucket_surfaces
 test_active_children_project_independent_of_home_captain_hold
 test_nameless_legacy_summary_uses_its_durable_identifier
+test_underway_status_is_active_or_blocked_with_a_reason
+test_child_status_and_full_text_across_ledger_versions
 test_newest_filed_gates_are_selected_before_snapshot_bounds
 test_underway_and_gate_rows_carry_the_durable_name_and_filed_date
 test_mixed_secondmate_roles_partial_state_and_captain_readiness

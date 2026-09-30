@@ -98,7 +98,9 @@
 #      awaiting_approval/fix_review -> parked (with gate findings), terminal
 #      passed/checks-passed/passed-with-override/passed-with-skips -> done,
 #      failed -> failed, cancelled -> unknown (no verdict unless the green
-#      delivery safeguard below applies). A cancelled outcome takes precedence
+#      delivery safeguard below applies), ci_monitor_interrupted -> blocked
+#      (its open PR is no longer monitored; the same green safeguard applies).
+#      A cancelled outcome takes precedence
 #      over an interrupted step's failed status or outstanding gate findings;
 #      it does not rewrite historical events or backlog records.
 #      passed-with-override is a passing outcome
@@ -111,7 +113,10 @@
 #      the active step is ci, `axi status` alone cannot tell "still waiting on
 #      checks" from "checks green, waiting on merge" (see nm_ci_checks_state) -
 #      a check of the full ci-step log overrides working -> done once checks read
-#      green, so a green PR is never silently read as still-validating. And a
+#      green, so a green PR is never silently read as still-validating, and a
+#      latest marker saying the workflows await maintainer approval keeps the
+#      run working with fm-classify-lib.sh's FM_CI_AWAITING_APPROVAL component
+#      appended to its detail. And a
 #      terminal failed or cancelled run whose only unfinished step is the ci
 #      monitor, after every substantive step completed (an explicitly skipped
 #      rebase is allowed) and the ci log's last marker reads checks green,
@@ -719,12 +724,15 @@ nm_run_activity_is_recent() {
 # shape, all on positive evidence: a steps[] table where every step completed
 # except `ci` failed/cancelled and an optional skipped rebase (any other
 # non-completed step disqualifies), plus nm_ci_checks_state=green (a genuinely red
-# check, or an unreadable ci log, cannot prove delivery). This is the
+# check, or an unreadable ci log, cannot prove delivery).
+# no-mistakes v1.84.0 records the same daemon-restart shape as its own terminal
+# ci_monitor_interrupted run, whose ci step reads `skipped`; with $1=interrupted
+# that ci word is accepted too. This is the
 # orphaned-CI-monitor gap (2026-09-05 jr-voice): a run held for a captain
 # merge decision polls until the shared daemon restarts under it and marks
 # the run failed, although GitHub's own check state - the actual shippability
 # authority - is green and every substantive step completed.
-nm_failed_run_is_green_held_ci() {
+nm_failed_run_is_green_held_ci() {  # [interrupted]
   local rows row rest step status saw_ci_failed
   rows=$(nm_steps_rows)
   [ -n "$rows" ] || return 1
@@ -737,6 +745,10 @@ nm_failed_run_is_green_held_ci() {
     case "$status" in
       completed) continue ;;
       skipped)
+        if [ "$step" = ci ] && [ "${1:-}" = interrupted ]; then
+          saw_ci_failed=1
+          continue
+        fi
         [ "$step" = rebase ] || return 1
         continue
         ;;
@@ -756,8 +768,8 @@ EOF
 
 # Apply the header's terminal-delivery safeguard. The earlier green log cannot
 # prove current PR disposition: a subsequent close can itself end the monitor.
-nm_reclassify_failed_run_as_held_green() {
-  nm_failed_run_is_green_held_ci || return 1
+nm_reclassify_failed_run_as_held_green() {  # [interrupted]
+  nm_failed_run_is_green_held_ci "${1:-}" || return 1
   local disposition pr_url
   disposition=$(passed_pr_detail)
   case "$disposition" in
@@ -769,6 +781,20 @@ nm_reclassify_failed_run_as_held_green() {
   pr_url=$(strip_quotes "$(nm_field pr)")
   [ -n "$pr_url" ] && RUN_DETAIL="$RUN_DETAIL: $pr_url"
   return 0
+}
+
+# A ci_monitor_interrupted run (no-mistakes' own terminal word, see
+# fm_nm_run_status_class) left its PR open with nothing monitoring CI. Checks
+# green on an open or merged PR is the same held-green delivery as above;
+# anything else is a real blocker, because the run is never resumed and only a
+# fresh validation run watches that PR's CI again.
+nm_classify_interrupted_ci_monitor() {
+  nm_reclassify_failed_run_as_held_green interrupted && return 0
+  local pr_url
+  RUN_STATE=blocked
+  RUN_DETAIL="ci monitor interrupted by daemon restart; PR remains open but unmonitored - rerun validation to resume"
+  pr_url=$(strip_quotes "$(nm_field pr)")
+  [ -z "$pr_url" ] || RUN_DETAIL="$RUN_DETAIL: $pr_url"
 }
 
 # 0 when an explicit probe proves the shared daemon down: `no-mistakes daemon
@@ -860,6 +886,9 @@ nm_effective_ci_step_status() {
 # green marker before it is still current (no-mistakes' own ci-log parser
 # ignores the line the same way, v1.32.2 through v1.79.0). Reading it as
 # not-ready held a green PR at working for as long as main kept advancing.
+# "CI workflows are held awaiting maintainer approval" (v1.84.0) is a not-ready
+# marker spelled held-approval: nothing has run, so no verdict is near, and the
+# caller discloses it as FM_CI_AWAITING_APPROVAL without changing the state.
 nm_ci_checks_state() {
   local run_id ci_log marker
   run_id=$(strip_quotes "$(nm_field id)")
@@ -867,11 +896,12 @@ nm_ci_checks_state() {
   ci_log=$(nm_run axi logs --step ci --run "$run_id" --full) || true
   [ -n "$ci_log" ] || { printf 'unknown'; return; }
   marker=$(printf '%s\n' "$ci_log" \
-    | grep -E 'CI checks passed|no CI checks reported - still monitoring|no CI checks reported yet|checks failed|issues detected|CI checks running' \
+    | grep -E 'CI checks passed|no CI checks reported - still monitoring|no CI checks reported yet|checks failed|issues detected|CI checks running|CI workflows are held awaiting maintainer approval' \
     | tail -1)
   case "$marker" in
     *"checks passed"*|*"no CI checks reported - still monitoring"*) printf 'green' ;;
     *"no CI checks reported yet"*|*"checks failed"*|*"issues detected"*|*"CI checks running"*) printf 'not-ready' ;;
+    *"CI workflows are held awaiting maintainer approval"*) printf 'held-approval' ;;
     *) printf 'unknown' ;;
   esac
 }
@@ -959,7 +989,7 @@ if [ "$KIND" = ship ] && [ -n "$CREW_BRANCH" ] && command -v no-mistakes >/dev/n
           emit unknown run-step "selected run unavailable or mismatched; run ids: $candidate_ids"
         fi
         case "$(strip_quotes "$(nm_field status)")" in
-          pending|running|fixing|ci|awaiting_approval|fix_review|completed|failed|cancelled) ;;
+          pending|running|fixing|ci|awaiting_approval|fix_review|completed|failed|cancelled|ci_monitor_interrupted) ;;
           *) emit unknown run-step "selected run status unverified; run ids: $candidate_ids" ;;
         esac
         if fm_nm_run_is_active "$RUN_OUT"; then current_class=live; else current_class=terminal; fi
@@ -1074,6 +1104,9 @@ if [ "$HAVE_RUN" = 1 ]; then
           RUN_STATE=failed; RUN_DETAIL="run failed"
         fi ;;
       cancelled) RUN_STATE=unknown; RUN_DETAIL="run cancelled: no verdict" ;;
+      ci_monitor_interrupted)
+        RUN_STATE=blocked
+        RUN_DETAIL="ci monitor interrupted by daemon restart; PR remains open but unmonitored - rerun validation to resume" ;;
       *)         RUN_STATE=unknown; RUN_DETAIL="runs list status: $COARSE_STATUS" ;;
     esac
   else
@@ -1098,6 +1131,7 @@ if [ "$HAVE_RUN" = 1 ]; then
           if nm_reclassify_failed_run_as_held_green; then :; else
             RUN_STATE=unknown; RUN_DETAIL="run cancelled: no verdict"
           fi ;;
+        ci-monitor-interrupted) nm_classify_interrupted_ci_monitor ;;
         *)             RUN_STATE=unknown; RUN_DETAIL="outcome: $outcome" ;;
       esac
     elif [ -n "$awaiting" ] || [ "$status" = awaiting_approval ] || [ "$status" = fix_review ] || [ -n "$gate_status" ] || [ "$has_gate" = 1 ]; then
@@ -1131,6 +1165,7 @@ if [ "$HAVE_RUN" = 1 ]; then
           if nm_reclassify_failed_run_as_held_green; then :; else
             RUN_STATE=unknown; RUN_DETAIL="run cancelled: no verdict"
           fi ;;
+        ci_monitor_interrupted) nm_classify_interrupted_ci_monitor ;;
         "")             RUN_STATE=working; RUN_DETAIL="run active" ;;
         *)              RUN_STATE=working; RUN_DETAIL="run active ($status)" ;;
       esac
@@ -1168,10 +1203,13 @@ if [ "$HAVE_RUN" = 1 ]; then
     elif [ "$CI_STEP_STATUS" = fixing ]; then
       CI_LOG_STATE=not-ready
     fi
-    if [ "$CI_LOG_STATE" != not-ready ]; then
-      emit_ship_status_done "run still monitoring PR"
-    fi
+    case "$CI_LOG_STATE" in
+      not-ready|held-approval) ;;
+      *) emit_ship_status_done "run still monitoring PR" ;;
+    esac
   fi
+  [ "$RUN_STATE:$CI_LOG_STATE" != working:held-approval ] \
+    || RUN_DETAIL="$RUN_DETAIL${SEP}$FM_CI_AWAITING_APPROVAL"
 
   # Reconcile the status log. A needs-decision/blocked log line that the run-step
   # has moved past (anything but a genuinely parked run) is deterministically
