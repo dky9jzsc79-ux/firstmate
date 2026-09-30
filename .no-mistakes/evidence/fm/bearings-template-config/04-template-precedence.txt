@@ -1,0 +1,78 @@
+### A. absolute path in FM_HOME/config/bearings-board-template
+/tmp/fm-lab.GhMaBb/custom templates/board.html
+board: /tmp/fm-lab.GhMaBb/.lavish/bearings-board.html
+network_warning: "Could not bind crew-msmith-11.tail6d5235.ts.net:44387 (ENOTFOUND: that name does not resolve right now); Lavish fell back to loopback and is not reachable at that address. Lavish remains available on 127.0.0.1 and keeps retrying crew-msmith-11.tail6d5235.ts.net in the background."
+session: live
+served: /tmp/fm-lab.GhMaBb/.lavish/bearings-board.html
+bound: lavish-73dae4b40851799a
+already-armed: lavish-73dae4b40851799a
+exit=0
+published board template: HOME-LOCAL (banner present)
+{"schema":"fm-bearings-board.v1","calls":2,"reconcile":["reconcile"]}
+
+### B. FM_CONFIG_OVERRIDE=$LAB/alt-config wins over the home config; its relative line resolves against FM_HOME
+home config -> /tmp/fm-lab.GhMaBb/missing.html
+alt  config -> custom templates/board.html
+board: /tmp/fm-lab.GhMaBb/.lavish/bearings-board.html
+network_warning: "Could not bind crew-msmith-11.tail6d5235.ts.net:44387 (ENOTFOUND: that name does not resolve right now); Lavish fell back to loopback and is not reachable at that address. Lavish remains available on 127.0.0.1 and keeps retrying crew-msmith-11.tail6d5235.ts.net in the background."
+session: live
+served: /tmp/fm-lab.GhMaBb/.lavish/bearings-board.html
+bound: lavish-73dae4b40851799a
+already-armed: lavish-73dae4b40851799a
+exit=0
+published board template: HOME-LOCAL (banner present)
+{"schema":"fm-bearings-board.v1","calls":2,"reconcile":["reconcile"]}
+
+### C. adversarial: FM_CONFIG_OVERRIDE set, alt dir has NO config, home config is valid -> home config must be ignored (shipped template)
+board: /tmp/fm-lab.GhMaBb/.lavish/bearings-board.html
+network_warning: "Could not bind crew-msmith-11.tail6d5235.ts.net:44387 (ENOTFOUND: that name does not resolve right now); Lavish fell back to loopback and is not reachable at that address. Lavish remains available on 127.0.0.1 and keeps retrying crew-msmith-11.tail6d5235.ts.net in the background."
+session: live
+served: /tmp/fm-lab.GhMaBb/.lavish/bearings-board.html
+bound: lavish-73dae4b40851799a
+already-armed: lavish-73dae4b40851799a
+exit=0
+published board template: SHIPPED (no banner)
+{"schema":"fm-bearings-board.v1","calls":2,"reconcile":["reconcile"]}
+
+### D. adversarial: FM_CONFIG_OVERRIDE relative line must NOT resolve against the override dir
+fm-bearings-board: board template must be a readable regular file, not a symlink: /tmp/fm-lab.GhMaBb/custom templates/board.html (configured by /tmp/fm-lab.GhMaBb/alt-config/bearings-board-template)
+exit=1
+published board template: SHIPPED (no banner)
+{"schema":"fm-bearings-board.v1","calls":2,"reconcile":["reconcile"]}
+
+### E. FM_BEARINGS_BOARD_TEMPLATE (tests-only env) still wins over an invalid home config
+board: /tmp/fm-lab.GhMaBb/.lavish/bearings-board.html
+network_warning: "Could not bind crew-msmith-11.tail6d5235.ts.net:44387 (ENOTFOUND: that name does not resolve right now); Lavish fell back to loopback and is not reachable at that address. Lavish remains available on 127.0.0.1 and keeps retrying crew-msmith-11.tail6d5235.ts.net in the background."
+session: live
+served: /tmp/fm-lab.GhMaBb/.lavish/bearings-board.html
+bound: lavish-73dae4b40851799a
+already-armed: lavish-73dae4b40851799a
+exit=0
+published board template: HOME-LOCAL (banner present)
+{"schema":"fm-bearings-board.v1","calls":2,"reconcile":["reconcile"]}
+
+### F. no config at all -> shipped template (default unchanged)
+board: /tmp/fm-lab.GhMaBb/.lavish/bearings-board.html
+network_warning: "Could not bind crew-msmith-11.tail6d5235.ts.net:44387 (ENOTFOUND: that name does not resolve right now); Lavish fell back to loopback and is not reachable at that address. Lavish remains available on 127.0.0.1 and keeps retrying crew-msmith-11.tail6d5235.ts.net in the background."
+session: live
+served: /tmp/fm-lab.GhMaBb/.lavish/bearings-board.html
+bound: lavish-73dae4b40851799a
+already-armed: lavish-73dae4b40851799a
+exit=0
+published board template: SHIPPED (no banner)
+{"schema":"fm-bearings-board.v1","calls":2,"reconcile":["reconcile"]}
+
+### G. cross-check: same home, config restored to the relative form (captain's steady state)
+board: /tmp/fm-lab.GhMaBb/.lavish/bearings-board.html
+network_warning: "Could not bind crew-msmith-11.tail6d5235.ts.net:44387 (ENOTFOUND: that name does not resolve right now); Lavish fell back to loopback and is not reachable at that address. Lavish remains available on 127.0.0.1 and keeps retrying crew-msmith-11.tail6d5235.ts.net in the background."
+session: live
+served: /tmp/fm-lab.GhMaBb/.lavish/bearings-board.html
+bound: lavish-73dae4b40851799a
+already-armed: lavish-73dae4b40851799a
+exit=0
+published board template: HOME-LOCAL (banner present)
+{"schema":"fm-bearings-board.v1","calls":2,"reconcile":["reconcile"]}
+
+procevent sources after all rebuilds:
+SOURCE                       ADAPTER      OWNER      PENDING
+lavish-73dae4b40851799a      lavish       live       0

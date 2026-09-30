@@ -1,0 +1,41 @@
+board sha256 before refusals: 9ce24bcf4495dd77
+
+### 1. config names a template that does not exist (absolute)
+/tmp/fm-lab.GhMaBb/nope/board.html
+fm-bearings-board: board template must be a readable regular file, not a symlink: /tmp/fm-lab.GhMaBb/nope/board.html (configured by /tmp/fm-lab.GhMaBb/config/bearings-board-template)
+exit=1
+
+### 2. config has two lines
+fm-bearings-board: /tmp/fm-lab.GhMaBb/config/bearings-board-template must contain exactly one non-empty path line (resolved template path: unavailable)
+exit=1
+
+### 3. config is empty
+fm-bearings-board: /tmp/fm-lab.GhMaBb/config/bearings-board-template must contain exactly one non-empty path line (resolved template path: unavailable)
+exit=1
+
+### 4. config points at a symlink to the shipped template
+fm-bearings-board: board template must be a readable regular file, not a symlink: /tmp/fm-lab.GhMaBb/link.html (configured by /tmp/fm-lab.GhMaBb/config/bearings-board-template)
+exit=1
+
+### 5. configured template lacks the data slot
+fm-bearings-board: board template does not carry exactly one data slot: /tmp/fm-lab.GhMaBb/slotless.html (configured by /tmp/fm-lab.GhMaBb/config/bearings-board-template)
+exit=1
+
+### 6. configured template carries two data slots
+fm-bearings-board: board template does not carry exactly one data slot: /tmp/fm-lab.GhMaBb/dup.html (configured by /tmp/fm-lab.GhMaBb/config/bearings-board-template)
+exit=1
+
+### 7. config path is a directory
+fm-bearings-board: /tmp/fm-lab.GhMaBb/config/bearings-board-template must be a readable regular file (resolved template path: unavailable)
+exit=1
+
+### 8. relative config line escaping upward with .. (resolves against FM_HOME, then missing)
+fm-bearings-board: board template must be a readable regular file, not a symlink: /tmp/fm-lab.GhMaBb/../does-not-exist.html (configured by /tmp/fm-lab.GhMaBb/config/bearings-board-template)
+exit=1
+
+board sha256 after refusals:  9ce24bcf4495dd77
+published board untouched by every refusal: yes
+
+source list (listener still the original one):
+SOURCE                       ADAPTER      OWNER      PENDING
+lavish-73dae4b40851799a      lavish       live       0
