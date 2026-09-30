@@ -913,6 +913,7 @@ For example, `.lavish/board-template.html` selects that file under this home.
 The template must retain the builder's data slot and payload script block; start from `.agents/skills/bearings/assets/board-template.html`.
 This setting is not inherited by secondmate homes.
 When `FM_CONFIG_OVERRIDE` is present for tests or specialized setup, it selects the config directory directly, while a relative template path still resolves against `FM_HOME`.
+An `FM_CONFIG_OVERRIDE` that is not a readable directory refuses the build, naming the variable and the resolved directory, rather than silently publishing the shipped template.
 `bin/fm-bearings-board.sh`'s header owns selection precedence, file validation, and fail-closed diagnostics.
 
 ## Worker launch environment (config/launch-env-allowlist)

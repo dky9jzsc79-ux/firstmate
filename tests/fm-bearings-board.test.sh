@@ -580,6 +580,51 @@ test_home_template_refusals() {
   pass "invalid home template configuration refuses without replacing the board"
 }
 
+test_config_override_must_be_a_readable_directory() {
+  local home data kind override out
+  for kind in file dangling-symlink missing unreadable; do
+    home=$(make_home "config-override-$kind")
+    data="$home/payload.json"
+    override="$home/alt-config"
+    write_valid_payload "$data"
+    mkdir -p "$home/config" "$home/.lavish"
+    printf 'existing board\n' > "$home/.lavish/bearings-board.html"
+    case "$kind" in
+      file) printf 'not a directory\n' > "$override" ;;
+      dangling-symlink) ln -s "$home/absent-config" "$override" ;;
+      missing) ;;
+      unreadable)
+        mkdir "$override"
+        chmod 000 "$override"
+        if [ -r "$override" ] && [ -x "$override" ]; then
+          printf 'skip: current user can read mode-000 directory\n'
+          continue
+        fi
+        ;;
+    esac
+    if out=$(unset FM_BEARINGS_BOARD_TEMPLATE; FM_CONFIG_OVERRIDE="$override" run_board "$home" build "$data" 2>&1); then
+      fail "$kind FM_CONFIG_OVERRIDE was accepted and published a board: $out"
+    fi
+    assert_contains "$out" 'FM_CONFIG_OVERRIDE' "$kind refusal did not name FM_CONFIG_OVERRIDE: $out"
+    assert_contains "$out" "$override" "$kind refusal omitted the resolved directory: $out"
+    [ "$(cat "$home/.lavish/bearings-board.html")" = 'existing board' ] \
+      || fail "$kind FM_CONFIG_OVERRIDE refusal changed the existing board"
+  done
+
+  # Without the override, a home that has no config directory at all still
+  # builds from the shipped template: absence is the normal fallback, not an
+  # unusable selection.
+  home=$(make_home config-override-unset)
+  data="$home/payload.json"
+  write_valid_payload "$data"
+  [ ! -e "$home/config" ] || fail "fixture home unexpectedly has a config directory"
+  out=$(unset FM_BEARINGS_BOARD_TEMPLATE FM_CONFIG_OVERRIDE; run_board "$home" build "$data" 2>&1) \
+    || fail "a home without a config directory did not fall back to the shipped template: $out"
+  extract_payload "$home/.lavish/bearings-board.html" | jq -e '.schema == "fm-bearings-board.v1"' >/dev/null \
+    || fail "shipped-template fallback lost the payload"
+  pass "an unusable FM_CONFIG_OVERRIDE refuses; an absent home config still falls back to the shipped template"
+}
+
 test_charted_kind_is_optional_and_accepts_both_values() {
   local home data
   home=$(make_home chartedkind)
@@ -859,6 +904,7 @@ test_build_refuses_a_nondecision_reconcile_value() {
 
 test_home_template_selection
 test_home_template_refusals
+test_config_override_must_be_a_readable_directory
 test_path_is_stable_and_home_scoped
 test_build_refuses_malformed_payloads_before_touching_the_board
 test_charted_kind_is_optional_and_accepts_both_values

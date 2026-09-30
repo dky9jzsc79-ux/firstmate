@@ -93,7 +93,11 @@
 # path line (a final newline is optional); relative paths resolve against
 # FM_HOME even when FM_CONFIG_OVERRIDE selects the config directory, without
 # shell expansion. It is home-local, gitignored, and not inherited by
-# secondmates.
+# secondmates. An absent config file, or an absent $FM_HOME/config, means the
+# shipped template; an explicitly selected FM_CONFIG_OVERRIDE that is not a
+# readable directory refuses instead, naming the variable and the resolved
+# directory, so an unusable override can never silently publish the shipped
+# template.
 # Selected templates must be readable regular files, not symlinks, with exactly
 # one data slot. Invalid configuration or templates refuse before publication;
 # configured-template errors name both the config file and resolved path.
@@ -122,11 +126,16 @@ fail() {
 }
 
 resolve_template() {
-  local config="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/bearings-board-template" configured
+  local config_dir="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}" config configured
+  config="$config_dir/bearings-board-template"
   TEMPLATE="${FM_BEARINGS_BOARD_TEMPLATE:-}"
   TEMPLATE_SOURCE=
   if [ -n "$TEMPLATE" ]; then
     return 0
+  fi
+  if [ -n "${FM_CONFIG_OVERRIDE:-}" ]; then
+    [ -d "$config_dir" ] && [ -r "$config_dir" ] && [ -x "$config_dir" ] \
+      || fail "FM_CONFIG_OVERRIDE must name a readable directory (resolved config directory: $config_dir)"
   fi
   TEMPLATE="$SCRIPT_DIR/../.agents/skills/bearings/assets/board-template.html"
   if [ -e "$config" ] || [ -L "$config" ]; then
