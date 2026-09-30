@@ -1,0 +1,179 @@
+--- transcript (no config file; config/ dir present)
+board: /tmp/fm-lab.zemUqO/fallback-no-config-file/.lavish/bearings-board.html
+session:
+  file: /tmp/fm-lab.zemUqO/fallback-no-config-file/.lavish/bearings-board.html
+  url: "http://127.0.0.1:4387/session/0123456789abcdef"
+  status: opened
+session: live
+served: /tmp/fm-lab.zemUqO/fallback-no-config-file/.lavish/bearings-board.html
+bound: lavish-5777cabf4474d3d8
+armed: lavish-5777cabf4474d3d8
+
+=== S1a shipped fallback (config file absent): pass ===
+rc=0; board published from shipped template; payload round-trips
+--- transcript (no config directory at all)
+board: /tmp/fm-lab.zemUqO/fallback-no-config-dir/.lavish/bearings-board.html
+session:
+  file: /tmp/fm-lab.zemUqO/fallback-no-config-dir/.lavish/bearings-board.html
+  url: "http://127.0.0.1:4387/session/0123456789abcdef"
+  status: opened
+session: live
+served: /tmp/fm-lab.zemUqO/fallback-no-config-dir/.lavish/bearings-board.html
+bound: lavish-3c0bf974484ff185
+armed: lavish-3c0bf974484ff185
+
+=== S1b shipped fallback (config directory absent): pass ===
+rc=0; board published; payload round-trips
+--- config/bearings-board-template
+/tmp/fm-lab.zemUqO/absolute/custom templates/board.html
+--- transcript
+board: /tmp/fm-lab.zemUqO/absolute/.lavish/bearings-board.html
+session:
+  file: /tmp/fm-lab.zemUqO/absolute/.lavish/bearings-board.html
+  url: "http://127.0.0.1:4387/session/0123456789abcdef"
+  status: opened
+session: live
+served: /tmp/fm-lab.zemUqO/absolute/.lavish/bearings-board.html
+bound: lavish-682dc404c28d3911
+armed: lavish-682dc404c28d3911
+
+=== S2 absolute config path selects the home template: pass ===
+rc=0; published board carries the home banner, no leftover slot, payload round-trips
+--- rebuild transcript
+board: /tmp/fm-lab.zemUqO/absolute/.lavish/bearings-board.html
+session:
+  file: /tmp/fm-lab.zemUqO/absolute/.lavish/bearings-board.html
+  url: "http://127.0.0.1:4387/session/0123456789abcdef"
+  status: opened
+session: live
+served: /tmp/fm-lab.zemUqO/absolute/.lavish/bearings-board.html
+bound: lavish-682dc404c28d3911
+already-armed: lavish-682dc404c28d3911
+
+=== S2b rebuild keeps using the home template without FM_BEARINGS_BOARD_TEMPLATE: pass ===
+rc=0; banner still present after rebuild
+--- config (no trailing newline): custom templates/board.html
+board: /tmp/fm-lab.zemUqO/relative/.lavish/bearings-board.html
+session:
+  file: /tmp/fm-lab.zemUqO/relative/.lavish/bearings-board.html
+  url: "http://127.0.0.1:4387/session/0123456789abcdef"
+  status: opened
+session: live
+served: /tmp/fm-lab.zemUqO/relative/.lavish/bearings-board.html
+bound: lavish-2bd0eebdf04597a8
+armed: lavish-2bd0eebdf04597a8
+
+=== S3 FM_HOME-relative config path (run from cwd=/): pass ===
+rc=0; home banner present
+--- transcript (FM_CONFIG_OVERRIDE=alt-config; home config names a missing file)
+board: /tmp/fm-lab.zemUqO/config-override/.lavish/bearings-board.html
+session:
+  file: /tmp/fm-lab.zemUqO/config-override/.lavish/bearings-board.html
+  url: "http://127.0.0.1:4387/session/0123456789abcdef"
+  status: opened
+session: live
+served: /tmp/fm-lab.zemUqO/config-override/.lavish/bearings-board.html
+bound: lavish-1c60f868db438686
+armed: lavish-1c60f868db438686
+
+=== S4 FM_CONFIG_OVERRIDE directory wins; relative path resolves against FM_HOME: pass ===
+rc=0; alt-config template used, home config ignored
+--- transcript (override dir has no config; home config has a valid template)
+board: /tmp/fm-lab.zemUqO/config-override-ignores-home/.lavish/bearings-board.html
+session:
+  file: /tmp/fm-lab.zemUqO/config-override-ignores-home/.lavish/bearings-board.html
+  url: "http://127.0.0.1:4387/session/0123456789abcdef"
+  status: opened
+session: live
+served: /tmp/fm-lab.zemUqO/config-override-ignores-home/.lavish/bearings-board.html
+bound: lavish-f721da7d69e82667
+armed: lavish-f721da7d69e82667
+
+=== S4b with FM_CONFIG_OVERRIDE set, the home config is not consulted: pass ===
+rc=0; shipped template published
+--- transcript (FM_BEARINGS_BOARD_TEMPLATE set; config names a missing file)
+board: /tmp/fm-lab.zemUqO/env-wins/.lavish/bearings-board.html
+session:
+  file: /tmp/fm-lab.zemUqO/env-wins/.lavish/bearings-board.html
+  url: "http://127.0.0.1:4387/session/0123456789abcdef"
+  status: opened
+session: live
+served: /tmp/fm-lab.zemUqO/env-wins/.lavish/bearings-board.html
+bound: lavish-1d770f872a9a79fa
+armed: lavish-1d770f872a9a79fa
+
+=== S5 FM_BEARINGS_BOARD_TEMPLATE (tests-only) still wins over config: pass ===
+rc=0
+--- transcript (regular-file)
+fm-bearings-board: FM_CONFIG_OVERRIDE must name a readable directory (resolved config directory: /tmp/fm-lab.zemUqO/override-regular-file/alt-config)
+
+=== S6 unusable FM_CONFIG_OVERRIDE (regular-file) refuses, names variable+path, board untouched: pass ===
+rc=1
+--- transcript (dangling-symlink)
+fm-bearings-board: FM_CONFIG_OVERRIDE must name a readable directory (resolved config directory: /tmp/fm-lab.zemUqO/override-dangling-symlink/alt-config)
+
+=== S6 unusable FM_CONFIG_OVERRIDE (dangling-symlink) refuses, names variable+path, board untouched: pass ===
+rc=1
+--- transcript (missing)
+fm-bearings-board: FM_CONFIG_OVERRIDE must name a readable directory (resolved config directory: /tmp/fm-lab.zemUqO/override-missing/alt-config)
+
+=== S6 unusable FM_CONFIG_OVERRIDE (missing) refuses, names variable+path, board untouched: pass ===
+rc=1
+--- transcript (unreadable-dir)
+fm-bearings-board: FM_CONFIG_OVERRIDE must name a readable directory (resolved config directory: /tmp/fm-lab.zemUqO/override-unreadable-dir/alt-config)
+
+=== S6 unusable FM_CONFIG_OVERRIDE (unreadable-dir) refuses, names variable+path, board untouched: pass ===
+rc=1
+--- transcript (missing)
+fm-bearings-board: board template must be a readable regular file, not a symlink: /tmp/fm-lab.zemUqO/tmpl-missing/custom.html (configured by /tmp/fm-lab.zemUqO/tmpl-missing/config/bearings-board-template)
+
+=== S7 invalid template (missing) refuses, names config+resolved path, board untouched: pass ===
+rc=1
+--- transcript (symlink)
+fm-bearings-board: board template must be a readable regular file, not a symlink: /tmp/fm-lab.zemUqO/tmpl-symlink/custom.html (configured by /tmp/fm-lab.zemUqO/tmpl-symlink/config/bearings-board-template)
+
+=== S7 invalid template (symlink) refuses, names config+resolved path, board untouched: pass ===
+rc=1
+--- transcript (slotless)
+fm-bearings-board: board template does not carry exactly one data slot: /tmp/fm-lab.zemUqO/tmpl-slotless/custom.html (configured by /tmp/fm-lab.zemUqO/tmpl-slotless/config/bearings-board-template)
+
+=== S7 invalid template (slotless) refuses, names config+resolved path, board untouched: pass ===
+rc=1
+--- transcript (duplicate-slot)
+fm-bearings-board: board template does not carry exactly one data slot: /tmp/fm-lab.zemUqO/tmpl-duplicate-slot/custom.html (configured by /tmp/fm-lab.zemUqO/tmpl-duplicate-slot/config/bearings-board-template)
+
+=== S7 invalid template (duplicate-slot) refuses, names config+resolved path, board untouched: pass ===
+rc=1
+--- transcript (directory)
+fm-bearings-board: board template must be a readable regular file, not a symlink: /tmp/fm-lab.zemUqO/tmpl-directory/custom.html (configured by /tmp/fm-lab.zemUqO/tmpl-directory/config/bearings-board-template)
+
+=== S7 invalid template (directory) refuses, names config+resolved path, board untouched: pass ===
+rc=1
+--- transcript (empty-config)
+fm-bearings-board: /tmp/fm-lab.zemUqO/tmpl-empty-config/config/bearings-board-template must contain exactly one non-empty path line (resolved template path: unavailable)
+
+=== S7 invalid template config (empty-config) refuses, names config, board untouched: pass ===
+rc=1
+--- transcript (multiline-config)
+fm-bearings-board: /tmp/fm-lab.zemUqO/tmpl-multiline-config/config/bearings-board-template must contain exactly one non-empty path line (resolved template path: unavailable)
+
+=== S7 invalid template config (multiline-config) refuses, names config, board untouched: pass ===
+rc=1
+--- transcript (config-is-dir)
+fm-bearings-board: /tmp/fm-lab.zemUqO/tmpl-config-is-dir/config/bearings-board-template must be a readable regular file (resolved template path: unavailable)
+
+=== S7 invalid template config (config-is-dir) refuses, names config, board untouched: pass ===
+rc=1
+--- transcript (crlf-config)
+fm-bearings-board: board template must be a readable regular file, not a symlink: /tmp/fm-lab.zemUqO/tmpl-crlf-config/custom.html (configured by /tmp/fm-lab.zemUqO/tmpl-crlf-config/config/bearings-board-template)
+
+=== S7 invalid template config (crlf-config) refuses, names config, board untouched: pass ===
+rc=1
+--- browser eval
+error: Bridge is running but the attached CDP target appears to have gone away
+code: BRIDGE_NOT_READY
+help[3]: The Chrome/Electron instance the bridge was attached to may have exited.,"Verify the target is still listening on its remote-debugging port, then re-run the command.","If the target was restarted, the bridge has already been recycled — this run will succeed once the target is reachable."
+code: BRIDGE_NOT_READY
+help[3]: The Chrome/Electron instance the bridge was attached to may have exited.,"Verify the target is still listening on its remote-debugging port, then re-run the command.","If the target was restarted, the bridge has already been recycled — this run will succeed once the target is reachable."
+
+TOTAL FAILURES: 0

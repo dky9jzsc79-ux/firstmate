@@ -1,0 +1,12 @@
+23e55847  home-config-absolute       rc=0  published SHIPPED template
+          board: /tmp/fm-lab.APX6fC/23e55847-home-config-absolute/.lavish/bearings-board.html
+23e55847  override-is-regular-file   rc=0  published SHIPPED template
+          board: /tmp/fm-lab.APX6fC/23e55847-override-is-regular-file/.lavish/bearings-board.html
+f20fb4b4  home-config-absolute       rc=0  published HOME template
+          board: /tmp/fm-lab.APX6fC/f20fb4b4-home-config-absolute/.lavish/bearings-board.html
+f20fb4b4  override-is-regular-file   rc=0  published SHIPPED template
+          board: /tmp/fm-lab.APX6fC/f20fb4b4-override-is-regular-file/.lavish/bearings-board.html
+04468233  home-config-absolute       rc=0  published HOME template
+          board: /tmp/fm-lab.APX6fC/04468233-home-config-absolute/.lavish/bearings-board.html
+04468233  override-is-regular-file   rc=1  board untouched
+          fm-bearings-board: FM_CONFIG_OVERRIDE must name a readable directory (resolved config directory: /tmp/fm-lab.APX6fC/04468233-override-is-regular-file/alt-config)
