@@ -2733,6 +2733,57 @@ EOF
   pass "Underway rows carry the durable task name and gates carry their filed date"
 }
 
+# The ledger's full-text fields are the only source --fields fulltext has for a
+# secondmate child, so they must carry the whole title and detail even past the
+# compact fields' cut; only the default board text stays clipped.
+test_secondmate_full_text_survives_past_a_thousand_characters() {
+  local home mate fakebin json long_title long_detail
+  home=$(make_home secondmate-long-fulltext)
+  : > "$home/data/secondmates.md"
+  mate="$TMP_ROOT/long-fulltext-home"
+  make_valid_secondmate_home long-mate "$mate"
+  append_secondmate_registry "$home" long-mate "$mate"
+  printf '## In flight\n\n## Queued\n\n## Done\n' > "$home/data/backlog.md"
+  long_title="Upstream option: home-local bearings board template via config/bearings-board-template"
+  while [ "${#long_title}" -le 1000 ]; do long_title="$long_title kept whole for the board"; done
+  long_detail="validating (running) · external wait: CI workflows await maintainer approval"
+  while [ "${#long_detail}" -le 1000 ]; do long_detail="$long_detail · run 01M3T2Z1W26M0HV69MKB3DTBDH"; done
+
+  printf '## In flight\n' > "$mate/data/backlog.md"
+  printf -- '- [ ] long-child - %s (repo: sample) (kind: ship) (since 2026-07-08)\n' "$long_title" \
+    >> "$mate/data/backlog.md"
+  printf '\n## Queued\n\n## Done\n' >> "$mate/data/backlog.md"
+  mkdir -p "$mate/projects/long-child"
+  fm_write_meta "$mate/state/long-child.meta" \
+    "window=firstmate:fm-long-child" "worktree=$mate/projects/long-child" "project=sample" \
+    "harness=claude" "kind=ship" "mode=no-mistakes"
+  record_claude_state "$mate/state" long-child idle
+  printf 'working: %s\n' "$long_detail" > "$mate/state/long-child.status"
+
+  fakebin=$(make_fakebin "$home")
+  json=$(run "$home" "$fakebin" --json)
+  jq -e --arg title "$long_title" --arg detail "$long_detail" '
+    first(.active_children[] | select(.id == "long-child"))
+    | .name_full == $title and .doing_full == $detail
+      and (.name | length) == 71 and (.name | endswith("…"))
+      and (.doing | length) == 121 and (.doing | endswith("…"))
+  ' "$mate/state/home-summary.json" >/dev/null \
+    || fail "the secondmate ledger cut full text past 1000 characters: $(cat "$mate/state/home-summary.json")"
+  printf '%s' "$json" | jq -e --arg title "$long_title" '
+    first(.in_flight[] | select(.id == "long-mate/long-child"))
+    | (.name | length) == 71 and (.name | endswith("…"))
+      and (.name[:70] as $shown | $title | startswith($shown))
+      and (.doing | length) == 91 and (.doing | endswith("…"))
+  ' >/dev/null || fail "default board text is not compact for a long secondmate child: $json"
+
+  json=$(run "$home" "$fakebin" --json --fields fulltext)
+  printf '%s' "$json" | jq -e --arg title "$long_title" --arg detail "$long_detail" '
+    first(.in_flight[] | select(.id == "long-mate/long-child"))
+    | .name == $title and .doing == $detail
+  ' >/dev/null || fail "--fields fulltext did not reveal the whole secondmate text: $json"
+  pass "secondmate full text survives past a thousand characters"
+}
+
 test_mixed_secondmate_roles_partial_state_and_captain_readiness() {
   local home fakebin hibit wheel sshhip ha canonical json
   home=$(make_home mixed-domain-regressions)
@@ -3550,6 +3601,7 @@ test_underway_status_is_active_or_blocked_with_a_reason
 test_child_status_and_full_text_across_ledger_versions
 test_newest_filed_gates_are_selected_before_snapshot_bounds
 test_underway_and_gate_rows_carry_the_durable_name_and_filed_date
+test_secondmate_full_text_survives_past_a_thousand_characters
 test_mixed_secondmate_roles_partial_state_and_captain_readiness
 test_main_captain_readiness_matches_secondmate_projection
 test_completed_scout_report_not_pending

@@ -89,8 +89,9 @@
 #     own observation is, never when a worker emitted the event.
 #     Each structured-home record carries active_children, decisions_open, holds,
 #     queued, landed, endpoints, counts, and omitted. Each active child carries
-#     compact name and doing plus name_full and doing_full (1000 characters at
-#     most) for renderers that reveal clipped text, and ci_awaiting_approval
+#     compact name and doing plus name_full and doing_full (whitespace-collapsed
+#     but never cut, so --fields fulltext renderers reveal the whole text; the
+#     ledger's only bound is FM_SNAPSHOT_SECONDMATE_MAX_BYTES), and ci_awaiting_approval
 #     copied from its task hint; ledgers published before those fields existed
 #     simply lack them. provenance.summary_source
 #     distinguishes "local-ledger", "remote-ledger", and "remote-ledger-cache";
@@ -992,6 +993,7 @@ secondmate_home_summary_json() {  # <backlog-json-file> <tasks-json-file>
     | def trunc($n):
       tostring | gsub("\\s+"; " ")
       | if length > $n then .[:$n] + "…" else . end;
+    def whole: tostring | gsub("\\s+"; " ");
     def filed_epoch:
       (.since // null) as $filed
       | if ($filed | type) != "string" then null
@@ -1066,10 +1068,10 @@ secondmate_home_summary_json() {  # <backlog-json-file> <tasks-json-file>
          | {id,kind,state:.current_state.state,
             repo:(($work.repo // .project // null) | if . == null then null else trunc(120) end),
             name:(($work.title // null) | if . == null then null else trunc(70) end),
-            name_full:(($work.title // null) | if . == null then null else trunc(1000) end),
+            name_full:(($work.title // null) | if . == null then null else whole end),
             source:.current_state.source,
             doing:((.current_state.detail // "") | trunc(120)),
-            doing_full:((.current_state.detail // "") | trunc(1000)),
+            doing_full:((.current_state.detail // "") | whole),
             ci_awaiting_approval:(.hints.ci_awaiting_approval == true)} ]) as $active_all
     | ($captain_holds_all
        + ([ $tasks[] as $t | ($t.hints.open_decisions // [])[]
