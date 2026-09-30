@@ -1,0 +1,60 @@
+{
+  "schema": "fm-bearings-board.v1",
+  "home": "fm-bearings-lab",
+  "generated": "2026-09-30T18:00:00Z",
+  "prs_live": false,
+  "captains_call": [],
+  "landed": [],
+  "underway": [
+    {
+      "id": "bearings-template-config",
+      "repo": "firstmate",
+      "name": "Upstream option: home-local bearings board template via config/bearings-board-template, kept compact by default and revealed on hover",
+      "state": "working",
+      "kind": "ship",
+      "doing": "validating (running) · external wait: CI workflows await maintainer approval · run: 01HELD",
+      "status": "blocked",
+      "reason": "awaiting upstream CI approval"
+    },
+    {
+      "id": "busy-ship",
+      "repo": "firstmate",
+      "name": "Busy ship",
+      "state": "working",
+      "kind": "ship",
+      "doing": "harness busy (claude-hook)",
+      "status": "active",
+      "reason": null
+    },
+    {
+      "id": "dead-ship",
+      "repo": "firstmate",
+      "name": "Dead ship",
+      "state": "unknown",
+      "kind": "ship",
+      "doing": "backend target gone: firstmate:fm-dead-ship",
+      "status": "blocked",
+      "reason": "status unverified"
+    },
+    {
+      "id": "paused-ship",
+      "repo": "firstmate",
+      "name": "Paused ship",
+      "state": "paused",
+      "kind": "ship",
+      "doing": "waiting for the upstream release",
+      "status": "blocked",
+      "reason": "external wait"
+    }
+  ],
+  "charted": [
+    {
+      "id": "queued-one",
+      "repo": "firstmate",
+      "title": "A queued item whose title is also long enough to be clipped in the half-width Charted Next column of the board",
+      "reason": "waiting on the fleet to free a slot for it",
+      "dispatchable": false,
+      "filed": "2026-09-28"
+    }
+  ]
+}

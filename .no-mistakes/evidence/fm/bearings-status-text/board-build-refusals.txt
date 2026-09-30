@@ -1,0 +1,8 @@
+# status=unknown
+fm-bearings-board: board data does not satisfy fm-bearings-board.v1: /tmp/fm-bearings-lab.761fON/bad-unknown.json
+# legacy row without status/reason
+fm-bearings-board: board data does not satisfy fm-bearings-board.v1: /tmp/fm-bearings-lab.761fON/bad-legacy.json
+# reason key absent
+fm-bearings-board: board data does not satisfy fm-bearings-board.v1: /tmp/fm-bearings-lab.761fON/bad-noreason.json
+# raw state word as status
+fm-bearings-board: board data does not satisfy fm-bearings-board.v1: /tmp/fm-bearings-lab.761fON/bad-raw.json

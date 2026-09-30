@@ -1,0 +1,27 @@
+## tests/fm-bearings-board.test.sh
+ok lines: 19
+exit=0
+ok - underway status is required and carries exactly active or blocked with its reason
+
+## tests/fm-bearings-board-render.test.sh
+ok lines: 11
+exit=0
+ok - an underway row badges active or blocked and a blocked row says why
+ok - clipped text reveals the whole payload text on hover, focus, tap, and keys
+
+## tests/fm-bearings-snapshot.test.sh
+ok lines: 62
+exit=0
+ok - Underway status is exactly active or blocked, naming the CI approval wait
+ok - child status and full text read correctly across ledger versions
+
+## tests/fm-crew-state.test.sh
+ok lines: 289
+exit=0
+ok - a CI monitor held for maintainer approval stays working and discloses the wait
+ok - a live run beside an interrupted CI monitor reads working
+ok - a selected interrupted CI monitor reads blocked with its PR
+ok - an interrupted CI monitor after green checks reads held-for-merge done
+ok - unrecognized run status is named and stays conservative on every row
+ok - a coarse ledger interrupted CI monitor reads blocked
+

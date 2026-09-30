@@ -1,0 +1,21 @@
+
+### A. selected run is ci_monitor_interrupted, ci log not green (workflows held) -> blocked, PR named, no open-PR claim
+state: blocked · source: run-step · ci monitor interrupted by daemon restart; PR unmonitored - rerun validation to resume: https://github.com/o/r/pull/204 · run: 01NEW
+
+### B. same interrupted run, ci log green but the PR was CLOSED without merge -> held-green declines; detail must not claim the PR is open
+state: blocked · source: run-step · ci monitor interrupted by daemon restart; PR unmonitored - rerun validation to resume: https://github.com/o/r/pull/204 · run: 01NEW
+
+### C. same interrupted run, ci green and the PR OPEN -> held for merge (done)
+state: done · source: run-step · checks green: PR held for merge (ci monitor ended): https://github.com/o/r/pull/204 · run: 01NEW
+
+### D. live run beside ci_monitor_interrupted history -> working, recognized vocabulary
+state: working · source: run-step · validating (running) · run: 01NEW
+
+### E. unrecognized word 'quarantined' on the OLDER row beside a terminal newest run -> unknown, word named (recorded decision: no relaxation)
+state: unknown · source: run-step · unrecognized run status quarantined; run ids: 01NEW, 01OLD; last reported run id: 01NEW
+
+### F. unrecognized word on the NEWEST row -> unknown, word named
+state: unknown · source: run-step · unrecognized run status quarantined; run ids: 01NEW, 01OLD; last reported run id: 01OLD
+
+### G. coarse 'no-mistakes runs' ledger word ci_monitor_interrupted -> blocked with the neutral detail
+state: blocked · source: run-step · ci monitor interrupted by daemon restart; PR unmonitored - rerun validation to resume

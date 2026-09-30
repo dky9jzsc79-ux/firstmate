@@ -1,0 +1,114 @@
+{
+  "schema": "fm-bearings.v1",
+  "home": "fm-bearings-lab.761fON/home",
+  "generated": "2026-09-30T18:00:00Z",
+  "prs": "not_requested (run: /bearings include PRs)",
+  "contributions": {
+    "scope": "owned contributions per home",
+    "known": 0,
+    "checked": 0,
+    "counts": {
+      "captain": 0,
+      "fleet": 0,
+      "maintainer": 0,
+      "nobody": 0
+    },
+    "complete": true,
+    "proven_clear": true,
+    "unmeasured_homes": 0,
+    "unreadable_records": 0,
+    "unmeasured": 0,
+    "stale_verdicts": 0,
+    "missing_verdicts": 0,
+    "captain_omitted": 0,
+    "captain": []
+  },
+  "in_flight": [
+    {
+      "id": "bearings-template-config",
+      "kind": "ship",
+      "state": "working",
+      "status": "blocked",
+      "reason": "awaiting upstream CI approval",
+      "repo": "firstmate",
+      "name": "Upstream option: home-local bearings board template via config/bearing…",
+      "doing": "validating (running) · external wait: CI workflows await maintainer approval · run: 01HELD"
+    },
+    {
+      "id": "busy-ship",
+      "kind": "ship",
+      "state": "working",
+      "status": "active",
+      "reason": null,
+      "repo": "firstmate",
+      "name": "Busy ship",
+      "doing": "harness busy (claude-hook)"
+    },
+    {
+      "id": "dead-ship",
+      "kind": "ship",
+      "state": "unknown",
+      "status": "blocked",
+      "reason": "status unverified",
+      "repo": "firstmate",
+      "name": "Dead ship",
+      "doing": "backend target gone: firstmate:fm-dead-ship"
+    },
+    {
+      "id": "paused-ship",
+      "kind": "ship",
+      "state": "paused",
+      "status": "blocked",
+      "reason": "external wait",
+      "repo": "firstmate",
+      "name": "Paused ship",
+      "doing": "waiting for the upstream release"
+    }
+  ],
+  "secondmates": [],
+  "secondmate_reconcile": [],
+  "decisions_open": [],
+  "landed": [],
+  "gates": [],
+  "reports": [],
+  "recorded_prs": [],
+  "unhealthy_endpoints": [
+    {
+      "id": "dead-ship",
+      "backend": "tmux",
+      "target": "firstmate:fm-dead-ship",
+      "exists": false,
+      "agent": "not_checked"
+    }
+  ],
+  "omitted": [
+    {
+      "surface": "backlog item bodies",
+      "reveal": "--fields bodies"
+    },
+    {
+      "surface": "untruncated text",
+      "reveal": "--fields fulltext"
+    },
+    {
+      "surface": "task paths",
+      "reveal": "--fields paths"
+    },
+    {
+      "surface": "watch/steer actions",
+      "reveal": "--fields actions"
+    },
+    {
+      "surface": "healthy endpoint detail",
+      "reveal": "--fields endpoints"
+    },
+    {
+      "surface": "full scout-report inventory",
+      "reveal": "--all-reports"
+    },
+    {
+      "surface": "live PR discovery + checks",
+      "reveal": "--include-prs"
+    }
+  ]
+}
